@@ -51,3 +51,23 @@ def test_api_endpoints_return_valid_contracts():
     assert client.get("/api/profile?latitude=10&longitude=20&date=2024-01-01").status_code == 200
     assert client.get("/api/comparison?latitude=10&longitude=20&date=2024-01-01&depth=10").status_code == 200
     assert client.get("/api/validation?date=2024-01-01&depth=10").status_code == 200
+
+
+def test_api_rejects_invalid_latitude_and_longitude():
+    assert client.get("/api/profile?latitude=91&longitude=20&date=2024-01-01").status_code == 422
+    assert client.get("/api/profile?latitude=10&longitude=181&date=2024-01-01").status_code == 422
+
+
+def test_api_rejects_invalid_depth_and_date():
+    assert client.get("/api/temperature?date=2024-01-01&depth=-1").status_code == 422
+    assert client.get("/api/profile?latitude=10&longitude=20&date=not-a-date").status_code == 422
+
+
+def test_api_rejects_invalid_geographic_bounds():
+    response = client.get("/api/temperature?date=2024-01-01&depth=10&latitude_min=20&latitude_max=10")
+    assert response.status_code == 400
+    assert "latitude_min" in response.json()["detail"]
+
+    response = client.get("/api/temperature?date=2024-01-01&depth=10&longitude_min=20&longitude_max=10")
+    assert response.status_code == 400
+    assert "longitude_min" in response.json()["detail"]
