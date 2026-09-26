@@ -1,29 +1,14 @@
-// OceanEmbed data layer — async, backend-ready with local mock fallback.
+// OceanEmbed frontend API adapter for the canonical FastAPI contracts.
 //
-// How it works:
-// - Set VITE_API_BASE (see .env.example) to point at the FastAPI backend.
-//   When set, every function below tries the backend first and maps the
-//   response into the stable UI shapes. On any network/HTTP/mapping error it
-//   logs a warning and falls back to the local mock generator, so the UI
-//   keeps working while the backend is still a scaffold.
-// - When VITE_API_BASE is unset, mocks are used directly (current behaviour).
-// - UI shapes are STABLE — components never touch raw backend JSON:
-//     field   -> { lats, lons, values, confidence, stats, date, depth, source }
-//     profile -> { depths, oceanembed, glorys, argo|null, lat, lon, date }
-//     skill   -> [{ depth, rmse, mae, bias, correlation }]
-//     floats  -> [{ lat, lon, id }]
-//     alerts  -> [{ lat, lon, depth, date, severity, text }]
+// The backend is the source of truth for request/response shapes. The frontend keeps
+// its existing UI-facing shapes, but it now maps directly to the backend contracts that
+// were intentionally designed first: /api/metadata, /api/temperature, /api/profile,
+// /api/comparison, and /api/validation.
 //
-// Proposed backend contract (FastAPI):
-//   GET {base}/api/fields?date=YYYY-MM-DD&depth=100&source=oceanembed|glorys
-//   GET {base}/api/fields/range?start=..&end=..&depth=..&source=.. -> { fields: [{ date, ...field }] }
-//   GET {base}/api/profiles?date=..&lat=..&lon=..
-//   GET {base}/api/skill
-//   GET {base}/api/argo?date=..
-//   GET {base}/api/alerts
-//   GET {base}/api/validation/summary, GET {base}/api/validation/scatter?n=..
+// When the backend has not implemented real scientific data yet, the frontend keeps the
+// state explicitly empty/unavailable instead of inventing values.
 
-export const STANDARD_DEPTHS = [0, 10, 20, 30, 50, 75, 100, 125, 150, 200, 300, 500, 700, 850, 1000];
+export const STANDARD_DEPTHS = [0, 5, 10, 20, 30, 50, 75, 100, 125, 150, 200, 300, 500, 700, 1000];
 export const BBOX = { latMin: 5, latMax: 30, lonMin: 45, lonMax: 105 };
 export const GRID = { nLat: 50, nLon: 60 };
 export const MODEL_VERSION = 'oceanembed-v0.3-mock';
@@ -54,52 +39,59 @@ function toNum(x, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function hasUsableTemperatureValues(values) {
+  if (!Array.isArray(values) || values.length === 0) return false;
+  return values.some((row) => {
+    if (Array.isArray(row)) {
+      return row.some((v) => v !== null && v !== undefined && Number.isFinite(Number(v)));
+    }
+    return row !== null && row !== undefined && Number.isFinite(Number(row));
+  });
+}
+
 function normalizeField(raw, { date, depth, source }) {
-  if (!raw || typeof raw !== 'object') throw new Error('bad field payload');
-  const lats = raw.lats ?? raw.lat ?? raw.latitudes;
-  const lons = raw.lons ?? raw.lon ?? raw.longitudes;
-  let values = raw.values ?? raw.temperature ?? raw.data;
-  let confidence = raw.confidence ?? raw.uncertainty ?? null;
-  if (!Array.isArray(lats) || !Array.isArray(lons) || !Array.isArray(values)) {
-    throw new Error('field payload missing lats/lons/values');
-  }
-  const nLat = lats.length, nLon = lons.length;
-  if (!Array.isArray(values[0])) {
-    // flat row-major array -> reshape
-    if (values.length !== nLat * nLon) throw new Error('field values size mismatch');
-    const grid = [];
-    for (let i = 0; i < nLat; i++) grid.push(values.slice(i * nLon, (i + 1) * nLon).map((v) => toNum(v)));
-    values = grid;
-  } else {
-    values = values.map((row) => row.map((v) => toNum(v)));
-  }
-  if (confidence && !Array.isArray(confidence[0]) && Array.isArray(confidence)) {
-    const grid = [];
-    for (let i = 0; i < nLat; i++) grid.push(confidence.slice(i * nLon, (i + 1) * nLon).map((v) => toNum(v, 1)));
-    confidence = grid;
-  }
-  if (!confidence) confidence = values.map((row) => row.map(() => 1));
-  let min = Infinity, max = -Infinity;
-  values.forEach((row) => row.forEach((v) => { if (v < min) min = v; if (v > max) max = v; }));
-  const stats = raw.stats ?? { min, max };
-  return { lats, lons, values, confidence, stats, date, depth, source };
+  if (!raw || typeof raw !== 'object') return null;
+
+  const values = Array.isArray(raw.values) ? raw.values : [];
+  if (!hasUsableTemperatureValues(values)) return null;
+
+  const normalized = values.map((row) => {
+    if (!Array.isArray(row)) return [Number.isFinite(Number(row)) ? Number(row) : null];
+    return row.map((v) => (v !== null && v !== undefined && Number.isFinite(Number(v)) ? Number(v) : null));
+  });
+
+  const confidence = [];
+  const stats = { min: Infinity, max: -Infinity };
+  normalized.forEach((row) => {
+    row.forEach((v) => {
+      if (v === null) return;
+      if (v < stats.min) stats.min = v;
+      if (v > stats.max) stats.max = v;
+    });
+    confidence.push(row.map(() => null));
+  });
+  if (!Number.isFinite(stats.min)) return null;
+
+  return { lats: [], lons: [], values: normalized, confidence, stats: { min: stats.min, max: stats.max }, date, depth, source };
 }
 
 function normalizeProfile(raw, { date, lat, lon }) {
-  if (!raw || typeof raw !== 'object') throw new Error('bad profile payload');
-  const depths = raw.depths ?? raw.depth ?? STANDARD_DEPTHS;
-  const pick = (...keys) => { for (const k of keys) if (Array.isArray(raw[k])) return raw[k]; return null; };
-  const oceanembed = pick('oceanembed', 'model', 'prediction', 'reconstruction');
-  const glorys = pick('glorys', 'reference');
-  let argo = pick('argo', 'observed', 'insitu', 'in_situ');
-  if (!oceanembed) throw new Error('profile payload missing model series');
-  if (argo && argo.every((v) => v === null)) argo = null;
-  return { depths, oceanembed, glorys: glorys ?? [...oceanembed], argo, lat, lon, date };
+  if (!raw || typeof raw !== 'object') return null;
+  const profileList = Array.isArray(raw.profile) ? raw.profile : [];
+  if (profileList.length === 0) return null;
+
+  const depths = profileList.map((p) => toNum(p.depth));
+  const oceanembed = profileList.map((p) => (p.temperature !== null && p.temperature !== undefined && Number.isFinite(Number(p.temperature)) ? Number(p.temperature) : null));
+  const glorys = Array(depths.length).fill(null);
+  const argo = null;
+  if (!oceanembed.some((v) => v !== null)) return null;
+
+  return { depths, oceanembed, glorys, argo, lat, lon, date };
 }
 
 function normalizeSkillList(raw) {
-  const arr = Array.isArray(raw) ? raw : raw.metrics ?? raw.skill ?? [];
-  if (!Array.isArray(arr)) throw new Error('bad skill payload');
+  const arr = Array.isArray(raw) ? raw : raw?.metrics ?? raw?.skill ?? [];
+  if (!Array.isArray(arr)) return [];
   return arr.map((m) => ({
     depth: toNum(m.depth),
     rmse: toNum(m.rmse),
@@ -110,8 +102,8 @@ function normalizeSkillList(raw) {
 }
 
 function normalizeFloats(raw) {
-  const arr = Array.isArray(raw) ? raw : raw.floats ?? raw.profiles ?? [];
-  if (!Array.isArray(arr)) throw new Error('bad argo payload');
+  const arr = Array.isArray(raw) ? raw : raw?.floats ?? raw?.profiles ?? [];
+  if (!Array.isArray(arr)) return [];
   return arr.map((f, i) => ({
     lat: toNum(f.lat ?? f.latitude),
     lon: toNum(f.lon ?? f.lng ?? f.longitude),
@@ -120,8 +112,8 @@ function normalizeFloats(raw) {
 }
 
 function normalizeAlerts(raw) {
-  const arr = Array.isArray(raw) ? raw : raw.alerts ?? [];
-  if (!Array.isArray(arr)) throw new Error('bad alerts payload');
+  const arr = Array.isArray(raw) ? raw : raw?.alerts ?? [];
+  if (!Array.isArray(arr)) return [];
   return arr.map((a) => ({
     lat: toNum(a.lat), lon: toNum(a.lon), depth: toNum(a.depth),
     date: String(a.date), severity: String(a.severity ?? 'watch'),
@@ -305,92 +297,80 @@ function mockArgoScatter(n = 220) {
 }
 
 // ============================ public async API ============================
-// Backend-first, mock fallback. All return Promises.
+// Canonical backend contracts only. Empty/unavailable states are explicit.
 
-async function withFallback(label, fn, mock) {
-  if (!isBackendEnabled()) return mock();
+async function fetchBackend(label, path, params = {}, timeoutMs = 12000) {
+  if (!isBackendEnabled()) return null;
   try {
-    return await fn();
+    return await getJSON(path, params, timeoutMs);
   } catch (e) {
-    console.warn(`[oceanembed] backend ${label} failed, using mock fallback:`, e.message);
-    return mock();
+    console.warn(`[oceanembed] backend ${label} unavailable:`, e.message);
+    return null;
   }
 }
 
 export async function getTemperatureField({ date, depth, source = 'oceanembed' } = {}) {
-  return withFallback('getTemperatureField',
-    async () => normalizeField(await getJSON('/api/fields', { date, depth, source }), { date, depth, source }),
-    () => mockTemperatureField({ date, depth, source }));
+  const raw = await fetchBackend('getTemperatureField', '/api/temperature', { date, depth });
+  if (!raw) return null;
+  return normalizeField(raw, { date, depth, source });
 }
 
 export async function getVerticalProfile({ date, lat, lon } = {}) {
-  return withFallback('getVerticalProfile',
-    async () => normalizeProfile(await getJSON('/api/profiles', { date, lat, lon }), { date, lat, lon }),
-    () => mockVerticalProfile({ date, lat, lon }));
+  const raw = await fetchBackend('getVerticalProfile', '/api/profile', { date, latitude: lat, longitude: lon });
+  if (!raw) return null;
+  return normalizeProfile(raw, { date, lat, lon });
+}
+
+export async function getComparison({ latitude, longitude, date, depth } = {}) {
+  const raw = await fetchBackend('getComparison', '/api/comparison', { latitude, longitude, date, depth });
+  if (!raw) return null;
+  const hasRealValues = raw.oceanembed_temperature !== null && raw.oceanembed_temperature !== undefined
+    && raw.glorys_temperature !== null && raw.glorys_temperature !== undefined;
+  if (!hasRealValues) return null;
+  return {
+    latitude: toNum(raw.latitude),
+    longitude: toNum(raw.longitude),
+    date: String(raw.date ?? date),
+    depth: toNum(raw.depth ?? depth),
+    oceanembed_temperature: toNum(raw.oceanembed_temperature),
+    glorys_temperature: toNum(raw.glorys_temperature),
+    difference: toNum(raw.difference),
+    unit: String(raw.unit ?? 'degC'),
+  };
 }
 
 export async function getSkillMetrics() {
-  return withFallback('getSkillMetrics',
-    async () => normalizeSkillList(await getJSON('/api/skill')),
-    () => mockSkillMetrics());
+  return [];
 }
 
 export async function getArgoFloats({ date } = {}) {
-  return withFallback('getArgoFloats',
-    async () => normalizeFloats(await getJSON('/api/argo', { date })),
-    () => mockArgoFloats({ date }));
+  return [];
 }
 
 export async function getAnomalyAlerts() {
-  return withFallback('getAnomalyAlerts',
-    async () => normalizeAlerts(await getJSON('/api/alerts')),
-    () => mockAnomalyAlerts());
+  return [];
 }
 
 export async function getArgoValidationSummary() {
-  return withFallback('getArgoValidationSummary',
-    async () => {
-      const raw = await getJSON('/api/validation/summary');
-      return {
-        nProfiles: toNum(raw.nProfiles ?? raw.n_profiles ?? raw.count, 0),
-        dateRange: String(raw.dateRange ?? raw.date_range ?? ''),
-        meanError: toNum(raw.meanError ?? raw.mean_error),
-        rmse: toNum(raw.rmse),
-        correlation: toNum(raw.correlation, 1),
-      };
-    },
-    () => mockArgoValidationSummary());
+  return {
+    nProfiles: 0,
+    dateRange: 'Unavailable',
+    meanError: null,
+    rmse: null,
+    correlation: null,
+  };
 }
 
 export async function getArgoScatter(n = 220) {
-  return withFallback('getArgoScatter',
-    async () => {
-      const raw = await getJSON('/api/validation/scatter', { n });
-      const arr = Array.isArray(raw) ? raw : raw.points ?? [];
-      return arr.map((p) => ({ obs: toNum(p.obs ?? p.observed), pred: toNum(p.pred ?? p.predicted), depth: toNum(p.depth) }));
-    },
-    () => mockArgoScatter(n));
+  return [];
 }
 
-// Range fetch for loop playback. Prefers a dedicated range endpoint; falls
-// back to parallel single-field requests (backend or mock). Returns
-// [{ date, field }] in chronological order.
 export async function getTemperatureRange({ start, end, depth, source = 'oceanembed' } = {}) {
   const dates = dateRangeStr(start, end);
-  if (isBackendEnabled()) {
-    try {
-      const raw = await getJSON('/api/fields/range', { start, end, depth, source }, 30000);
-      const list = Array.isArray(raw) ? raw : raw.fields ?? [];
-      if (list.length > 0) {
-        return list.map((item) => {
-          const d = String(item.date ?? item.day);
-          return { date: d, field: normalizeField(item.field ?? item, { date: d, depth, source }) };
-        });
-      }
-    } catch (e) {
-      console.warn('[oceanembed] range endpoint unavailable, falling back to parallel fetch:', e.message);
-    }
+  const fields = [];
+  for (const d of dates) {
+    const field = await getTemperatureField({ date: d, depth, source });
+    if (field) fields.push({ date: d, field });
   }
-  const fields = await Promise.all(dates.map((d) => getTemperatureField({ date: d, depth, source })));
-  return dates.map((d, i) => ({ date: d, field: fields[i] }));
+  return fields;
 }

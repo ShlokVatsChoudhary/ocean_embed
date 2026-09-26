@@ -1,40 +1,32 @@
-import { useEffect, useMemo, useState } from 'react';
-import MapHeatmap from '../components/MapHeatmap';
+import { useEffect, useState } from 'react';
 import { DepthSlider, DateControl } from '../components/controls';
 import { VerticalProfileChart } from '../components/charts';
-import { getTemperatureField, getVerticalProfile, getArgoFloats, prettyDate } from '../api/oceanembed';
-
-function diffField(a, b) {
-  return { ...a, values: a.values.map((row, i) => row.map((v, j) => +(v - b.values[i][j]).toFixed(3))), stats: { min: -2.5, max: 2.5 }, source: 'difference' };
-}
-function anomalyField(a, baseline) {
-  return { ...a, values: a.values.map((row) => row.map((v) => +(v - baseline).toFixed(3))), stats: { min: -3, max: 3 }, source: 'anomaly' };
-}
+import { getComparison, getVerticalProfile, getArgoFloats, prettyDate } from '../api/oceanembed';
 
 export default function AnalyzeView({ date, setDate, depth, setDepth, selected, setSelected }) {
-  const [anomalyMode, setAnomalyMode] = useState(false);
-  const [baseline, setBaseline] = useState('jan-clim');
-  const [modelF, setModelF] = useState(null);
-  const [glorysF, setGlorysF] = useState(null);
-  const [fieldError, setFieldError] = useState(null);
-  const [fieldLoading, setFieldLoading] = useState(true);
+  const [comparison, setComparison] = useState(null);
+  const [comparisonError, setComparisonError] = useState(null);
   const [floats, setFloats] = useState([]);
   const [profile, setProfile] = useState(null);
   const [profileError, setProfileError] = useState(null);
 
   useEffect(() => {
     let dead = false;
-    setFieldLoading(true); setFieldError(null);
-    Promise.all([
-      getTemperatureField({ date, depth }),
-      getTemperatureField({ date, depth, source: 'glorys' }),
-      getArgoFloats({ date }),
-    ]).then(([m, g, f]) => {
-      if (dead) return;
-      setModelF(m); setGlorysF(g); setFloats(f); setFieldLoading(false);
-    }).catch((e) => { if (!dead) { setFieldError(e.message); setFieldLoading(false); } });
+    setComparison(null);
+    setComparisonError(null);
+    getComparison({ latitude: selected.lat, longitude: selected.lon, date, depth })
+      .then((c) => { if (!dead) setComparison(c); })
+      .catch((e) => { if (!dead) setComparisonError(e.message); });
     return () => { dead = true; };
-  }, [date, depth]);
+  }, [date, depth, selected.lat, selected.lon]);
+
+  useEffect(() => {
+    let dead = false;
+    getArgoFloats({ date })
+      .then((f) => { if (!dead) setFloats(f); })
+      .catch(() => { if (!dead) setFloats([]); });
+    return () => { dead = true; };
+  }, [date]);
 
   useEffect(() => {
     let dead = false;
@@ -45,17 +37,6 @@ export default function AnalyzeView({ date, setDate, depth, setDepth, selected, 
     return () => { dead = true; };
   }, [date, selected]);
 
-  const diffF = useMemo(() => (modelF && glorysF ? diffField(modelF, glorysF) : null), [modelF, glorysF]);
-  const range = useMemo(() => {
-    if (!modelF || !glorysF) return null;
-    const lo = Math.min(modelF.stats.min, glorysF.stats.min);
-    const hi = Math.max(modelF.stats.max, glorysF.stats.max);
-    return { min: Math.floor(lo), max: Math.ceil(hi) };
-  }, [modelF, glorysF]);
-  const anomF = useMemo(
-    () => (modelF ? anomalyField(modelF, baseline === 'jan-clim' ? 26.5 - depth * 0.012 : 25.0 - depth * 0.01) : null),
-    [modelF, baseline, depth]
-  );
   const markers = floats.map((f) => ({ lat: f.lat, lon: f.lon, kind: 'argo' }));
 
   const loadFloat = (id) => {
@@ -66,41 +47,49 @@ export default function AnalyzeView({ date, setDate, depth, setDepth, selected, 
   return (
     <div>
       <section className="panel">
-        <h2>Side-by-side comparison — {depth}m, {prettyDate(date)}</h2>
+        <h2>Comparison — {depth}m, {prettyDate(date)}</h2>
         <div className="map-controls">
           <DateControl date={date} onChange={setDate} />
         </div>
         <DepthSlider depth={depth} onChange={setDepth} />
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center', margin: '8px 0' }}>
-          <label className="check">
-            <input type="checkbox" checked={anomalyMode} onChange={(e) => setAnomalyMode(e.target.checked)} />
-            Anomaly mode (experimental)
-          </label>
-          {anomalyMode && (
-            <select value={baseline} onChange={(e) => setBaseline(e.target.value)} aria-label="Baseline selector">
-              <option value="jan-clim">Baseline: January climatology</option>
-              <option value="annual">Baseline: Annual mean</option>
-            </select>
-          )}
-        </div>
-        {anomalyMode && (
+
+        {comparisonError && (
+          <div className="error-box">Comparison unavailable: {comparisonError}</div>
+        )}
+        {!comparison && !comparisonError && (
           <div className="notice">
-            Experimental anomaly view — only as good as its baseline climatology. Not validated; use for pattern
-            inspection only. Baseline: {baseline === 'jan-clim' ? 'January climatology' : 'Annual mean'} (mock).
+            Comparison data is currently unavailable. The backend comparison endpoint is a placeholder contract and does not return real OceanEmbed/GLORYS values yet.
           </div>
         )}
-        {fieldLoading && <div className="loading">Loading comparison fields…</div>}
-        {fieldError && <div className="error-box">Failed to load fields: {fieldError}</div>}
-        {!fieldLoading && !fieldError && anomalyMode && anomF && (
-          <div className="tri-grid">
-            <div><h4>OceanEmbed anomaly</h4><MapHeatmap field={anomF} mode="diverging" fixedRange={{ min: -3, max: 3 }} markers={markers} selected={selected} onSelect={setSelected} height={320} /></div>
-          </div>
-        )}
-        {!fieldLoading && !fieldError && !anomalyMode && modelF && glorysF && diffF && (
-          <div className="tri-grid">
-            <div><h4>OceanEmbed</h4><MapHeatmap field={modelF} fixedRange={range} markers={markers} selected={selected} onSelect={setSelected} height={320} /></div>
-            <div><h4>GLORYS</h4><MapHeatmap field={glorysF} fixedRange={range} markers={markers} selected={selected} onSelect={setSelected} height={320} /></div>
-            <div><h4>Difference (model − GLORYS)</h4><MapHeatmap field={diffF} mode="diverging" fixedRange={{ min: -2.5, max: 2.5 }} selected={selected} onSelect={setSelected} height={320} /></div>
+        {comparison && (
+          <div className="panel" style={{ marginTop: 12, padding: 16 }}>
+            <h3>Comparison</h3>
+            <div className="tri-grid">
+              <div>
+                <strong>Depth:</strong> {comparison.depth} m<br />
+                <strong>Date:</strong> {prettyDate(comparison.date)}
+              </div>
+              <div>
+                <strong>Location:</strong> {selected.lat.toFixed(4)}°, {selected.lon.toFixed(4)}°
+              </div>
+              <div>
+                <strong>Unit:</strong> {comparison.unit === 'degC' ? '°C' : comparison.unit}
+              </div>
+            </div>
+            <div className="tri-grid" style={{ marginTop: 12 }}>
+              <div>
+                <h4>OceanEmbed</h4>
+                <div>{comparison.oceanembed_temperature == null ? 'Unavailable' : `${Number(comparison.oceanembed_temperature).toFixed(2)} °C`}</div>
+              </div>
+              <div>
+                <h4>GLORYS</h4>
+                <div>{comparison.glorys_temperature == null ? 'Unavailable' : `${Number(comparison.glorys_temperature).toFixed(2)} °C`}</div>
+              </div>
+              <div>
+                <h4>Difference</h4>
+                <div>{comparison.difference == null ? 'Unavailable' : `${Number(comparison.difference).toFixed(2)} °C`}</div>
+              </div>
+            </div>
           </div>
         )}
         <div className="muted small">● black dots = ARGO float profiles available on {prettyDate(date)} — click a float ID below or the map to load its profile.</div>
