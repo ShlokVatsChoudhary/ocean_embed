@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes.comparison import router as comparison_router
 from app.api.routes.metadata import router as metadata_router
@@ -10,6 +11,14 @@ app = FastAPI(
     title="OceanEmbed API",
     description="Backend API for OceanEmbed subsurface ocean temperature reconstruction.",
     version="0.1.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(metadata_router)

@@ -14,9 +14,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from app.schemas.oceanembed import ProfilePoint
-
-
 class ModelInferenceInput(BaseModel):
     """Input payload shared across the future ML inference layer.
 
@@ -44,12 +41,9 @@ class ModelTemperaturePrediction(BaseModel):
 
 
 class ModelProfilePrediction(BaseModel):
-    """Structured profile result from the ML model."""
+    """Raw vertical temperature prediction returned by the ML model."""
 
-    latitude: float | None = None
-    longitude: float | None = None
-    date: Date | None = None
-    profile: list[ProfilePoint] = Field(default_factory=list)
+    temperatures: list[float | None]
 
 
 class OceanEmbedModel(ABC):
