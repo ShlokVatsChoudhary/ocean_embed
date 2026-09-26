@@ -1,12 +1,24 @@
 from datetime import date
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from app.model.interface import OceanEmbedModel, PlaceholderOceanEmbedModel
 from app.schemas.oceanembed import TemperatureResponse
 from app.services.temperature import get_temperature as get_temperature_service
-from app.validation import validate_depth, validate_geographic_bounds, validate_latitude, validate_longitude
+from app.validation import (
+    validate_geographic_bounds,
+    validate_latitude,
+    validate_longitude,
+    validate_model_date,
+    validate_standard_depth,
+)
 
 router = APIRouter(prefix="/api/temperature", tags=["temperature"])
+
+
+def get_temperature_model() -> OceanEmbedModel:
+    """Return the configured model implementation for temperature-field requests."""
+    return PlaceholderOceanEmbedModel()
 
 
 @router.get("", response_model=TemperatureResponse, summary="Return a temperature field for a requested date and depth")
@@ -18,9 +30,11 @@ async def get_temperature(
     latitude_max: float | None = Query(default=None, ge=-90, le=90, description="Optional maximum latitude for subset extraction."),
     longitude_min: float | None = Query(default=None, ge=-180, le=180, description="Optional minimum longitude for subset extraction."),
     longitude_max: float | None = Query(default=None, ge=-180, le=180, description="Optional maximum longitude for subset extraction."),
+    model: OceanEmbedModel = Depends(get_temperature_model),
 ) -> TemperatureResponse:
     try:
-        validate_depth(depth)
+        validate_model_date(selected_date)
+        validate_standard_depth(depth)
         validate_geographic_bounds(latitude_min, latitude_max, "latitude_min", "latitude_max")
         validate_geographic_bounds(longitude_min, longitude_max, "longitude_min", "longitude_max")
         if latitude_min is not None:
@@ -41,4 +55,5 @@ async def get_temperature(
         latitude_max=latitude_max,
         longitude_min=longitude_min,
         longitude_max=longitude_max,
+        model=model,
     )

@@ -8,7 +8,7 @@
 // When the backend has not implemented real scientific data yet, the frontend keeps the
 // state explicitly empty/unavailable instead of inventing values.
 
-export const STANDARD_DEPTHS = [0, 5, 10, 20, 30, 50, 75, 100, 125, 150, 200, 300, 500, 700, 1000];
+export const STANDARD_DEPTHS = [0.0, 5.0, 10.0, 20.0, 30.0, 50.0, 75.0, 100.0, 125.0, 150.0, 200.0, 300.0, 500.0, 700.0, 1000.0];
 export const BBOX = { latMin: 5, latMax: 30, lonMin: 45, lonMax: 105 };
 export const GRID = { nLat: 50, nLon: 60 };
 export const MODEL_VERSION = 'oceanembed-v0.3-mock';

@@ -3,6 +3,7 @@ from datetime import date
 from app.core.constants import STANDARD_DEPTHS
 from app.model.interface import ModelInferenceInput, OceanEmbedModel, PlaceholderOceanEmbedModel
 from app.schemas.oceanembed import ProfilePoint, ProfileResponse
+from app.validation import validate_model_date, validate_standard_depth
 
 
 def get_profile(
@@ -16,10 +17,9 @@ def get_profile(
     if model is None:
         model = PlaceholderOceanEmbedModel()
 
-    if depth is not None and depth not in STANDARD_DEPTHS:
-        raise ValueError(
-            f"Requested depth {depth} is not one of the standard profile depths: {STANDARD_DEPTHS}."
-        )
+    validate_model_date(selected_date)
+    if depth is not None:
+        validate_standard_depth(depth)
 
     request = ModelInferenceInput(
         date=selected_date,

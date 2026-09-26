@@ -6,7 +6,7 @@ from app.core.constants import STANDARD_DEPTHS
 from app.model.interface import OceanEmbedModel, PlaceholderOceanEmbedModel
 from app.schemas.oceanembed import ProfileResponse
 from app.services.profile import get_profile as get_profile_service
-from app.validation import validate_depth, validate_latitude, validate_longitude
+from app.validation import validate_latitude, validate_longitude, validate_model_date, validate_standard_depth
 
 router = APIRouter(prefix="/api/profile", tags=["profile"])
 
@@ -28,13 +28,9 @@ async def get_profile(
     try:
         validate_latitude(latitude)
         validate_longitude(longitude)
+        validate_model_date(selected_date)
         if depth is not None:
-            validate_depth(depth)
-            if depth not in STANDARD_DEPTHS:
-                valid_depths = ", ".join(str(value) for value in STANDARD_DEPTHS)
-                raise ValueError(
-                    f"Requested depth {depth} is not one of the standard profile depths: {valid_depths}."
-                )
+            validate_standard_depth(depth)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

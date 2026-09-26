@@ -34,30 +34,13 @@ def _extract_temperature_value(payload: object) -> float | None:
 
 
 def _extract_point_temperature_from_model(model: OceanEmbedModel, latitude: float, longitude: float, selected_date: date, depth: float) -> float | None:
-    """Ask the model for a point temperature and extract the scalar value from its response."""
-    request = ModelInferenceInput(
-        date=selected_date,
+    """Ask the model for a point temperature using its proper point accessor."""
+    return model.point_temperature(
         latitude=latitude,
         longitude=longitude,
+        date=selected_date,
         depth=depth,
     )
-    prediction = model.infer_temperature_field(request)
-
-    if not prediction.values:
-        return None
-
-    flattened: list[float | None] = []
-    for row in prediction.values:
-        if isinstance(row, list):
-            flattened.extend(row)
-        else:
-            flattened.append(row)
-
-    for value in flattened:
-        if value is not None:
-            return float(value)
-
-    return None
 
 
 def get_comparison(

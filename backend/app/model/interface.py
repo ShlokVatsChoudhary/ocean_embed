@@ -14,6 +14,19 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.core.constants import (
+    MODEL_AVAILABLE_DATES,
+    MODEL_GRID_COLS,
+    MODEL_GRID_ROWS,
+    MODEL_LATITUDE_MAX,
+    MODEL_LATITUDE_MIN,
+    MODEL_LATITUDE_RESOLUTION,
+    MODEL_LONGITUDE_MAX,
+    MODEL_LONGITUDE_MIN,
+    MODEL_LONGITUDE_RESOLUTION,
+    STANDARD_DEPTHS,
+)
+
 class ModelInferenceInput(BaseModel):
     """Input payload shared across the future ML inference layer.
 
@@ -63,9 +76,57 @@ class OceanEmbedModel(ABC):
     ) -> ModelProfilePrediction:
         """Return a vertical profile prediction for the given point request."""
 
+    def available_dates(self) -> list[Date]:
+        """Return the dates with available model data."""
+        return list(MODEL_AVAILABLE_DATES)
+
+    def point_temperature(
+        self,
+        *,
+        latitude: float,
+        longitude: float,
+        date: Date,
+        depth: float,
+    ) -> float | None:
+        """Return a single temperature value for a nearest-grid-cell lookup."""
+        request = ModelInferenceInput(date=date, latitude=latitude, longitude=longitude, depth=depth)
+        prediction = self.infer_temperature_field(request)
+        if not prediction.values:
+            return None
+
+        row_count = len(prediction.values)
+        col_count = len(prediction.values[0]) if row_count else 0
+        row_index = self._nearest_grid_index(
+            latitude,
+            MODEL_LATITUDE_MIN,
+            MODEL_LATITUDE_MAX,
+            MODEL_LATITUDE_RESOLUTION,
+            row_count,
+        )
+        col_index = self._nearest_grid_index(
+            longitude,
+            MODEL_LONGITUDE_MIN,
+            MODEL_LONGITUDE_MAX,
+            MODEL_LONGITUDE_RESOLUTION,
+            col_count,
+        )
+
+        if row_index < row_count and col_index < col_count:
+            return prediction.values[row_index][col_index]
+        return None
+
+    @staticmethod
+    def _nearest_grid_index(value: float, min_value: float, max_value: float, resolution: float, length: int) -> int:
+        if value <= min_value:
+            return 0
+        if value >= max_value:
+            return max(length - 1, 0)
+        fraction = (max_value - value) / resolution
+        return min(max(int(round(fraction)), 0), length - 1)
+
 
 class PlaceholderOceanEmbedModel(OceanEmbedModel):
-    """Placeholder implementation that intentionally raises until a trained model is supplied."""
+    """Placeholder model that keeps the backend contract without pretending real inference exists."""
 
     def infer_temperature_field(
         self,

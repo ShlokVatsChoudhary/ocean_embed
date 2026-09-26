@@ -1,18 +1,18 @@
+from app.core.constants import MODEL_AVAILABLE_DATES, STANDARD_DEPTHS
+from app.model.interface import PlaceholderOceanEmbedModel
 from app.schemas.oceanembed import MetadataResponse
 
 
 def get_metadata() -> MetadataResponse:
-    """Return deterministic mock metadata for development and API-contract testing.
-
-    This is intentionally placeholder data only; it is not a real OceanEmbed dataset
-    inventory or scientific metadata source.
-    """
+    """Return metadata derived from the canonical backend/model constants."""
+    model = PlaceholderOceanEmbedModel()
+    available_dates = [date.isoformat() for date in model.available_dates()]
     return MetadataResponse(
         dataset_name="OceanEmbed",
         project="OceanEmbed",
-        description="Mock development metadata for OceanEmbed backend API contracts.",
-        available_dates=["2024-01-01", "2024-01-15", "2024-02-01"],
-        available_depths=[0.0, 10.0, 25.0, 50.0, 100.0, 200.0],
+        description="OceanEmbed model-backed temperature reconstruction backend.",
+        available_dates=available_dates,
+        available_depths=list(STANDARD_DEPTHS),
         spatial_resolution={
             "latitude": 0.25,
             "longitude": 0.25,

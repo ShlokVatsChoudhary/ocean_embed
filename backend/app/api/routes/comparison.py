@@ -7,7 +7,7 @@ from app.data.interfaces import GlorysDataSource
 from app.model.interface import OceanEmbedModel, PlaceholderOceanEmbedModel
 from app.schemas.oceanembed import ComparisonResponse
 from app.services.comparison import get_comparison as get_comparison_service
-from app.validation import validate_depth, validate_latitude, validate_longitude
+from app.validation import validate_latitude, validate_longitude, validate_model_date, validate_standard_depth
 
 router = APIRouter(prefix="/api/comparison", tags=["comparison"])
 
@@ -35,7 +35,8 @@ async def get_comparison(
     try:
         validate_latitude(latitude)
         validate_longitude(longitude)
-        validate_depth(depth)
+        validate_model_date(selected_date)
+        validate_standard_depth(depth)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
