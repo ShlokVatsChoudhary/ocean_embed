@@ -27,6 +27,9 @@ Thumbs.db
 *.pth
 *.ckpt
 
+# ...except the shipped OceanEmbed v1 model artifact (small, intentional)
+!model/weights/*.h5
+
 # Local data
 data/raw/
 data/processed/

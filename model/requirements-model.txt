@@ -1,0 +1,5 @@
+# Runtime dependencies for the OceanEmbed v1 model package.
+# Only needed where the model actually runs (the model provider side /
+# an ML worker) — the FastAPI backend does not otherwise require TensorFlow.
+tensorflow>=2.16
+numpy>=1.26
