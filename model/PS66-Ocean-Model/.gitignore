@@ -1,0 +1,40 @@
+# ---- large data (never commit raw or processed arrays) ----
+data/
+*.nc
+*.npy
+*.npz
+*.h5
+
+# ---- model weights (large binaries) ----
+checkpoints/
+
+# ---- small trained weights we DO want on GitHub ----
+!weights/
+!weights/*.h5
+
+# ---- small 7-day sample so the repo runs out of the box ----
+!samples/
+!samples/*.npy
+!samples/*.npz
+
+# ---- logs ----
+logs/
+
+# ---- python ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# ---- macOS ----
+.DS_Store
+
+# ---- R ----
+.Rhistory
+*.Rhistory
+
+# ---- editors ----
+.vscode/
+.idea/
+*.swp
