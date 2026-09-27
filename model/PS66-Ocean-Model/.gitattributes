@@ -1,0 +1,27 @@
+# Normalise line endings across Windows / macOS / Linux
+* text=auto eol=lf
+
+*.py   text eol=lf
+*.md   text eol=lf
+*.txt  text eol=lf
+*.ipynb text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+
+# Binary assets - never convert, never diff
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.nc    binary
+*.npy   binary
+*.npz   binary
+*.h5    binary
+
+# Keep the language stats honest (notebooks are mostly JSON boilerplate)
+*.ipynb linguist-detectable=false
+notebooks/* linguist-detectable=false
+figures/* linguist-documentation
+colab/* linguist-documentation
+samples/* linguist-documentation
+weights/* linguist-documentation
