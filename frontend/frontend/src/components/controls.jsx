@@ -17,18 +17,20 @@ export function DepthSlider({ depth, onChange }) {
   );
 }
 
-export function DateControl({ date, onChange, min = '2020-01-01', max = '2020-02-15' }) {
+export function DateControl({ date, onChange, min = '2020-01-01', max = '2020-01-07' }) {
   const step = (n) => {
     const d = new Date(date + 'T00:00:00');
     d.setDate(d.getDate() + n);
-    onChange(d.toISOString().slice(0, 10));
+    const next = d.toISOString().slice(0, 10);
+    if (next >= min && next <= max) onChange(next);
   };
   return (
     <div className="ctl-row">
       <label>Date</label>
-      <button className="btn" onClick={() => step(-1)} aria-label="Previous day">◀</button>
+      <button className="btn" onClick={() => step(-1)} aria-label="Previous day" disabled={date <= min}>◀</button>
       <input type="date" value={date} min={min} max={max} onChange={(e) => e.target.value && onChange(e.target.value)} />
-      <button className="btn" onClick={() => step(1)} aria-label="Next day">▶</button>
+      <button className="btn" onClick={() => step(1)} aria-label="Next day" disabled={date >= max}>▶</button>
+      <span className="muted small" style={{ marginLeft: 8 }}>Available data: Jan 1–7, 2020</span>
     </div>
   );
 }

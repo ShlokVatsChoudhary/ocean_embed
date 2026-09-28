@@ -4,12 +4,12 @@ import ExploreView from './views/ExploreView';
 import AnalyzeView from './views/AnalyzeView';
 import ValidateView from './views/ValidateView';
 import { AlertBanner } from './components/controls';
-import { getAnomalyAlerts, MODEL_VERSION, LAST_UPDATE, prettyDate, isBackendEnabled, getApiBase } from './api/oceanembed';
+import { getAnomalyAlerts, MODEL_VERSION, LAST_UPDATE, prettyDate } from './api/oceanembed';
 
 export default function App() {
   const [showHero, setShowHero] = useState(true);
   const [view, setView] = useState('explore');
-  const [date, setDate] = useState('2020-01-15');
+  const [date, setDate] = useState('2020-01-01');
   const [depth, setDepth] = useState(100);
   const [selected, setSelected] = useState({ lat: 12.0, lon: 68.0 });
   const [bannerOff, setBannerOff] = useState(false);
@@ -58,8 +58,10 @@ export default function App() {
       <footer className="statusbar">
         <span>Last data update: {prettyDate(LAST_UPDATE)}</span>
         <span>Model: {MODEL_VERSION}</span>
-        <span>Data: {isBackendEnabled() ? `backend ${getApiBase()}` : 'local mock'}</span>
-        <span>Domain: 5°N–30°N, 45°E–105°E · daily · 0.25° · depths 0–1000 m</span>
+        <span>Domain: 5°N–30°N · 45°E–105°E</span>
+        <span>Resolution: 0.25°</span>
+        <span>Depth: 0–1000 m</span>
+        <span>Data period: Jan 1–7, 2020</span>
       </footer>
     </div>
   );

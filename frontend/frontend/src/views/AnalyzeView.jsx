@@ -6,6 +6,7 @@ import { getComparison, getVerticalProfile, getArgoFloats, prettyDate } from '..
 export default function AnalyzeView({ date, setDate, depth, setDepth, selected, setSelected }) {
   const [comparison, setComparison] = useState(null);
   const [comparisonError, setComparisonError] = useState(null);
+  const [comparisonLoading, setComparisonLoading] = useState(false);
   const [floats, setFloats] = useState([]);
   const [profile, setProfile] = useState(null);
   const [profileError, setProfileError] = useState(null);
@@ -14,9 +15,11 @@ export default function AnalyzeView({ date, setDate, depth, setDepth, selected, 
     let dead = false;
     setComparison(null);
     setComparisonError(null);
+    setComparisonLoading(true);
     getComparison({ latitude: selected.lat, longitude: selected.lon, date, depth })
       .then((c) => { if (!dead) setComparison(c); })
-      .catch((e) => { if (!dead) setComparisonError(e.message); });
+      .catch((e) => { if (!dead) setComparisonError(e.message); })
+      .finally(() => { if (!dead) setComparisonLoading(false); });
     return () => { dead = true; };
   }, [date, depth, selected.lat, selected.lon]);
 
@@ -53,13 +56,12 @@ export default function AnalyzeView({ date, setDate, depth, setDepth, selected, 
         </div>
         <DepthSlider depth={depth} onChange={setDepth} />
 
-        {comparisonError && (
-          <div className="error-box">Comparison unavailable: {comparisonError}</div>
+        {comparisonLoading && <div className="loading">Loading comparison…</div>}
+        {comparisonError && !comparisonLoading && (
+          <div className="error-box">Comparison unavailable for this location.</div>
         )}
-        {!comparison && !comparisonError && (
-          <div className="notice">
-            Comparison data is currently unavailable. The backend comparison endpoint is a placeholder contract and does not return real OceanEmbed/GLORYS values yet.
-          </div>
+        {!comparison && !comparisonError && !comparisonLoading && (
+          <div className="notice">Comparison unavailable for this location.</div>
         )}
         {comparison && (
           <div className="panel" style={{ marginTop: 12, padding: 16 }}>
@@ -82,8 +84,11 @@ export default function AnalyzeView({ date, setDate, depth, setDepth, selected, 
                 <div>{comparison.oceanembed_temperature == null ? 'Unavailable' : `${Number(comparison.oceanembed_temperature).toFixed(2)} °C`}</div>
               </div>
               <div>
-                <h4>GLORYS</h4>
+                <h4>{comparison.glorys_status === 'bundled_sample' ? 'Reference sample' : 'GLORYS'}</h4>
                 <div>{comparison.glorys_temperature == null ? 'Unavailable' : `${Number(comparison.glorys_temperature).toFixed(2)} °C`}</div>
+                {comparison.glorys_status === 'bundled_sample' && (
+                  <div className="muted small" style={{ marginTop: 6 }}>Bundled/reference sample</div>
+                )}
               </div>
               <div>
                 <h4>Difference</h4>

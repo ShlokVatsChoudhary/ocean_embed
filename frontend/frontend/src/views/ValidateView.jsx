@@ -36,11 +36,13 @@ export default function ValidateView({ date, setDate, depth, setDepth, selected,
     setFieldLoading(true); setFieldError(null);
     Promise.all([
       getTemperatureField({ date, depth }),
-      getTemperatureField({ date, depth, source: 'glorys' }),
       getArgoFloats({ date }),
-    ]).then(([m, g, f]) => {
+    ]).then(([m, f]) => {
       if (dead) return;
-      setModelF(m); setGlorysF(g); setFloats(f); setFieldLoading(false);
+      setModelF(m);
+      setGlorysF(null);
+      setFloats(f);
+      setFieldLoading(false);
     }).catch((e) => { if (!dead) { setFieldError(e.message); setFieldLoading(false); } });
     return () => { dead = true; };
   }, [date, depth]);
@@ -94,12 +96,18 @@ export default function ValidateView({ date, setDate, depth, setDepth, selected,
         </section>
         <aside className="panel">
           <h3>ARGO validation summary</h3>
-          <div className="metric-row">
-            <SkillMetricCard label="ARGO profiles" value={summary ? summary.nProfiles.toLocaleString() : '…'} />
-            <SkillMetricCard label="Mean |error|" value={summary ? summary.meanError.toFixed(2) : '…'} unit=" °C" />
-            <SkillMetricCard label="Correlation" value={summary ? summary.correlation.toFixed(3) : '…'} />
-          </div>
-          <div className="muted small">Date range: {summary ? summary.dateRange : '…'}</div>
+          {summary ? (
+            <>
+              <div className="metric-row">
+                <SkillMetricCard label="ARGO profiles" value={summary.nProfiles.toLocaleString()} />
+                <SkillMetricCard label="Mean |error|" value={summary.meanError.toFixed(2)} unit=" °C" />
+                <SkillMetricCard label="Correlation" value={summary.correlation.toFixed(3)} />
+              </div>
+              <div className="muted small">Date range: {summary.dateRange}</div>
+            </>
+          ) : (
+            <div className="notice">Validation metrics are not available yet.</div>
+          )}
           <h3 style={{ marginTop: 12 }}>Predicted vs observed</h3>
           {scatter.length > 0 ? <ArgoScatter points={scatter} /> : <div className="loading">Loading…</div>}
         </aside>
@@ -112,11 +120,17 @@ export default function ValidateView({ date, setDate, depth, setDepth, selected,
         <DepthSlider depth={depth} onChange={setDepth} />
         {fieldLoading && <div className="loading">Loading error maps…</div>}
         {fieldError && <div className="error-box">Failed to load fields: {fieldError}</div>}
-        {!fieldLoading && !fieldError && modelF && glorysF && diffF && (
+        {!fieldLoading && !fieldError && modelF && (
           <div className="quad-grid">
             <div><h4>Prediction (OceanEmbed)</h4><MapHeatmap field={modelF} fixedRange={range} selected={selected} onSelect={setSelected} height={280} /></div>
-            <div><h4>GLORYS reference</h4><MapHeatmap field={glorysF} fixedRange={range} selected={selected} onSelect={setSelected} height={280} /></div>
-            <div><h4>Error (model − GLORYS)</h4><MapHeatmap field={diffF} mode="diverging" fixedRange={{ min: -2.5, max: 2.5 }} selected={selected} onSelect={setSelected} height={280} /></div>
+            <div>
+              <h4>GLORYS reference</h4>
+              <div className="notice">Field-level GLORYS reference is not available yet. Use the selected-point comparison in Explore to inspect real model-vs-GLORYS values.</div>
+            </div>
+            <div>
+              <h4>Difference</h4>
+              <div className="notice">Field-level difference maps are not available yet. Use the selected-point difference in Explore.</div>
+            </div>
             <div><h4>ARGO overlay</h4><MapHeatmap field={modelF} fixedRange={range} markers={markers} selected={selected} onSelect={setSelected} height={280} /></div>
           </div>
         )}

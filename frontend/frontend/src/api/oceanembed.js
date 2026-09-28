@@ -10,9 +10,10 @@
 
 export const STANDARD_DEPTHS = [0.0, 5.0, 10.0, 20.0, 30.0, 50.0, 75.0, 100.0, 125.0, 150.0, 200.0, 300.0, 500.0, 700.0, 1000.0];
 export const BBOX = { latMin: 5, latMax: 30, lonMin: 45, lonMax: 105 };
-export const GRID = { nLat: 50, nLon: 60 };
-export const MODEL_VERSION = 'oceanembed-v0.3-mock';
-export const LAST_UPDATE = '2020-02-15';
+export const GRID = { nLat: 101, nLon: 241 };
+export const MODEL_VERSION = 'oceanembed-v0.3-real';
+export const LAST_UPDATE = '2020-01-07';
+export const SUPPORTED_DATES = ['2020-01-01', '2020-01-02', '2020-01-03', '2020-01-04', '2020-01-05', '2020-01-06', '2020-01-07'];
 
 const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '');
 export const isBackendEnabled = () => API_BASE.length > 0;
@@ -55,24 +56,34 @@ function normalizeField(raw, { date, depth, source }) {
   const values = Array.isArray(raw.values) ? raw.values : [];
   if (!hasUsableTemperatureValues(values)) return null;
 
+  const bounds = raw.metadata && typeof raw.metadata === 'object' ? raw.metadata.bounds ?? {} : {};
+  const latMin = Number.isFinite(Number(bounds.latitude_min)) ? Number(bounds.latitude_min) : BBOX.latMin;
+  const latMax = Number.isFinite(Number(bounds.latitude_max)) ? Number(bounds.latitude_max) : BBOX.latMax;
+  const lonMin = Number.isFinite(Number(bounds.longitude_min)) ? Number(bounds.longitude_min) : BBOX.lonMin;
+  const lonMax = Number.isFinite(Number(bounds.longitude_max)) ? Number(bounds.longitude_max) : BBOX.lonMax;
+
+  const stepLat = 0.25;
+  const stepLon = 0.25;
+  const latCount = Math.round((latMax - latMin) / stepLat) + 1;
+  const lonCount = Math.round((lonMax - lonMin) / stepLon) + 1;
+  const lats = Array.from({ length: latCount }, (_, i) => Number((latMin + i * stepLat).toFixed(4)));
+  const lons = Array.from({ length: lonCount }, (_, j) => Number((lonMin + j * stepLon).toFixed(4)));
+
   const normalized = values.map((row) => {
-    if (!Array.isArray(row)) return [Number.isFinite(Number(row)) ? Number(row) : null];
+    if (!Array.isArray(row)) {
+      return [Number.isFinite(Number(row)) ? Number(row) : null];
+    }
     return row.map((v) => (v !== null && v !== undefined && Number.isFinite(Number(v)) ? Number(v) : null));
   });
 
-  const confidence = [];
-  const stats = { min: Infinity, max: -Infinity };
-  normalized.forEach((row) => {
-    row.forEach((v) => {
-      if (v === null) return;
-      if (v < stats.min) stats.min = v;
-      if (v > stats.max) stats.max = v;
-    });
-    confidence.push(row.map(() => null));
-  });
-  if (!Number.isFinite(stats.min)) return null;
+  const confidence = normalized.map((row) => row.map((v) => (v !== null && Number.isFinite(v) ? 1 : 0)));
+  const finite = [];
+  normalized.forEach((row) => row.forEach((v) => {
+    if (v !== null && Number.isFinite(v)) finite.push(v);
+  }));
+  const stats = finite.length > 0 ? { min: Math.min(...finite), max: Math.max(...finite) } : { min: 0, max: 0 };
 
-  return { lats: [], lons: [], values: normalized, confidence, stats: { min: stats.min, max: stats.max }, date, depth, source };
+  return { lats, lons, values: normalized, confidence, stats, date, depth, source };
 }
 
 function normalizeProfile(raw, { date, lat, lon }) {
@@ -323,18 +334,40 @@ export async function getVerticalProfile({ date, lat, lon } = {}) {
 
 export async function getComparison({ latitude, longitude, date, depth } = {}) {
   const raw = await fetchBackend('getComparison', '/api/comparison', { latitude, longitude, date, depth });
-  if (!raw) return null;
-  const hasRealValues = raw.oceanembed_temperature !== null && raw.oceanembed_temperature !== undefined
-    && raw.glorys_temperature !== null && raw.glorys_temperature !== undefined;
-  if (!hasRealValues) return null;
+  if (!raw || typeof raw !== 'object') return null;
+
+  const oceanembedTemperature = raw.oceanembed_temperature !== null && raw.oceanembed_temperature !== undefined
+    ? Number(raw.oceanembed_temperature)
+    : null;
+  const glorysTemperature = raw.glorys_temperature !== null && raw.glorys_temperature !== undefined
+    ? Number(raw.glorys_temperature)
+    : null;
+  const difference = raw.difference !== null && raw.difference !== undefined
+    ? Number(raw.difference)
+    : (Number.isFinite(oceanembedTemperature) && Number.isFinite(glorysTemperature)
+      ? oceanembedTemperature - glorysTemperature
+      : null);
+
+  const hasUsefulPayload = [
+    oceanembedTemperature,
+    glorysTemperature,
+    difference,
+    raw.glorys_status,
+    raw.glorys_provenance,
+  ].some((value) => value !== null && value !== undefined && value !== '');
+
+  if (!hasUsefulPayload) return null;
+
   return {
-    latitude: toNum(raw.latitude),
-    longitude: toNum(raw.longitude),
+    latitude: toNum(raw.latitude ?? latitude),
+    longitude: toNum(raw.longitude ?? longitude),
     date: String(raw.date ?? date),
     depth: toNum(raw.depth ?? depth),
-    oceanembed_temperature: toNum(raw.oceanembed_temperature),
-    glorys_temperature: toNum(raw.glorys_temperature),
-    difference: toNum(raw.difference),
+    oceanembed_temperature: Number.isFinite(oceanembedTemperature) ? oceanembedTemperature : null,
+    glorys_temperature: Number.isFinite(glorysTemperature) ? glorysTemperature : null,
+    difference: Number.isFinite(difference) ? difference : null,
+    glorys_status: String(raw.glorys_status ?? 'unknown'),
+    glorys_provenance: String(raw.glorys_provenance ?? 'Reference source unavailable'),
     unit: String(raw.unit ?? 'degC'),
   };
 }
@@ -365,12 +398,3 @@ export async function getArgoScatter(n = 220) {
   return [];
 }
 
-export async function getTemperatureRange({ start, end, depth, source = 'oceanembed' } = {}) {
-  const dates = dateRangeStr(start, end);
-  const fields = [];
-  for (const d of dates) {
-    const field = await getTemperatureField({ date: d, depth, source });
-    if (field) fields.push({ date: d, field });
-  }
-  return fields;
-}

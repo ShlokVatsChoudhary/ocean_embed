@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { seqColor, divColor } from './color';
 import { BBOX } from '../api/oceanembed';
 
@@ -9,6 +9,7 @@ import { BBOX } from '../api/oceanembed';
 export default function MapHeatmap({ field, mode = 'sequential', fixedRange = null, markers = [], selected = null, showConfidence = false, onSelect = null, height = 380 }) {
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
+  const [hover, setHover] = useState(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -39,7 +40,14 @@ export default function MapHeatmap({ field, mode = 'sequential', fixedRange = nu
     const cw = plotW / nLon, ch = plotH / nLat;
     for (let i = 0; i < nLat; i++) {
       for (let j = 0; j < nLon; j++) {
-        const t = (values[i][j] - vmin) / span;
+        const rawValue = values[i]?.[j];
+        const numericValue = rawValue !== null && rawValue !== undefined && Number.isFinite(Number(rawValue)) ? Number(rawValue) : null;
+        if (numericValue === null) {
+          ctx.fillStyle = '#eef2f7';
+          ctx.fillRect(padL + j * cw, padT + i * ch, cw + 0.5, ch + 0.5);
+          continue;
+        }
+        const t = (numericValue - vmin) / span;
         ctx.fillStyle = mode === 'diverging' ? divColor(t) : seqColor(t);
         ctx.fillRect(padL + j * cw, padT + i * ch, cw + 0.5, ch + 0.5);
         if (showConfidence && confidence && confidence[i][j] < 0.6) {
@@ -57,7 +65,6 @@ export default function MapHeatmap({ field, mode = 'sequential', fixedRange = nu
     const xOf = (lon) => padL + ((lon - BBOX.lonMin) / (BBOX.lonMax - BBOX.lonMin)) * plotW;
     const yOf = (lat) => padT + ((BBOX.latMax - lat) / (BBOX.latMax - BBOX.latMin)) * plotH;
 
-    // graticule + ticks
     ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1;
     ctx.fillStyle = '#33414f'; ctx.font = '11px system-ui';
     for (let lat = 5; lat <= 30; lat += 5) {
@@ -93,6 +100,41 @@ export default function MapHeatmap({ field, mode = 'sequential', fixedRange = nu
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [field, mode, showConfidence, JSON.stringify(markers), JSON.stringify(selected), height, fixedRange ? fixedRange.min + ':' + fixedRange.max : 'auto']);
 
+  const handlePointerMove = (e) => {
+    if (!field || !field.values || !field.lats || !field.lons || !canvasRef.current) {
+      setHover(null);
+      return;
+    }
+    const canvas = canvasRef.current;
+    const proj = canvas._proj;
+    if (!proj) return;
+    const rect = canvas.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+    const fx = (px - proj.padL) / proj.plotW;
+    const fy = (py - proj.padT) / proj.plotH;
+    if (fx < 0 || fx > 1 || fy < 0 || fy > 1) {
+      setHover(null);
+      return;
+    }
+    const lonIndex = Math.min(field.lons.length - 1, Math.max(0, Math.round(fx * (field.lons.length - 1))));
+    const latIndex = Math.min(field.lats.length - 1, Math.max(0, Math.round(fy * (field.lats.length - 1))));
+    const value = field.values?.[latIndex]?.[lonIndex];
+    if (value === null || value === undefined || !Number.isFinite(Number(value))) {
+      setHover(null);
+      return;
+    }
+    const lat = field.lats[latIndex];
+    const lon = field.lons[lonIndex];
+    setHover({
+      x: Math.min(rect.width - 150, Math.max(12, px + 14)),
+      y: Math.min(rect.height - 62, Math.max(12, py + 14)),
+      value: Number(value),
+      lat,
+      lon,
+    });
+  };
+
   const handleClick = (e) => {
     if (!onSelect) return;
     const canvas = canvasRef.current;
@@ -107,13 +149,38 @@ export default function MapHeatmap({ field, mode = 'sequential', fixedRange = nu
     onSelect({ lat: +lat.toFixed(2), lon: +lon.toFixed(2) });
   };
 
-  // colorbar
   const barVals = Array.from({ length: 48 }, (_, i) => i / 47);
   return (
-    <div>
+    <div style={{ position: 'relative' }}>
       <div ref={wrapRef} style={{ width: '100%' }}>
-        <canvas ref={canvasRef} onClick={handleClick} style={{ cursor: onSelect ? 'crosshair' : 'default', display: 'block', borderRadius: 6 }} />
+        <canvas
+          ref={canvasRef}
+          onClick={handleClick}
+          onPointerMove={handlePointerMove}
+          onPointerLeave={() => setHover(null)}
+          style={{ cursor: onSelect ? 'crosshair' : 'default', display: 'block', borderRadius: 6 }}
+        />
       </div>
+      {hover && (
+        <div style={{
+          position: 'absolute',
+          left: hover.x,
+          top: hover.y,
+          background: 'rgba(17, 24, 39, 0.92)',
+          color: '#fff',
+          fontSize: 12,
+          padding: '6px 8px',
+          borderRadius: 6,
+          pointerEvents: 'none',
+          boxShadow: '0 6px 14px rgba(0,0,0,0.18)',
+          zIndex: 10,
+          minWidth: 130,
+        }}>
+          <div>Temperature: {hover.value.toFixed(2)} °C</div>
+          <div>Lat: {hover.lat.toFixed(2)}°</div>
+          <div>Lon: {hover.lon.toFixed(2)}°</div>
+        </div>
+      )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
         <span style={{ fontSize: 11, color: '#445', minWidth: 44, textAlign: 'right' }}>
           {mode === 'diverging' ? `−${(fixedRange ? Math.max(Math.abs(fixedRange.min), Math.abs(fixedRange.max)) : 2.5).toFixed(1)}` : (fixedRange ? fixedRange.min.toFixed(1) : field?.stats.min.toFixed(1))}°C
