@@ -9,11 +9,34 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from datetime import date
+from enum import Enum
 from typing import Any
+
+
+class DataSourceStatus(str, Enum):
+    """Explicit provenance states for scientific reference datasets."""
+
+    LIVE = "live"
+    BUNDLED_SAMPLE = "bundled_sample"
+    UNAVAILABLE = "unavailable"
 
 
 class DataSource(ABC):
     """Base interface for a scientific-data source."""
+
+    @property
+    @abstractmethod
+    def status(self) -> DataSourceStatus:
+        """Return the operational source status for this dataset."""
+
+    @property
+    def provenance(self) -> str:
+        """Return a human-readable provenance note for the configured dataset."""
+        if self.status == DataSourceStatus.LIVE:
+            return "Live GLORYS data source configured for this deployment."
+        if self.status == DataSourceStatus.BUNDLED_SAMPLE:
+            return "Bundled sample data is being used; this is not live GLORYS data."
+        return "GLORYS data is unavailable in this environment."
 
     @abstractmethod
     def is_available(self) -> bool:

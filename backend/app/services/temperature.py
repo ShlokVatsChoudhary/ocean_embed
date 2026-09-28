@@ -12,7 +12,7 @@ from app.core.constants import (
     MODEL_LONGITUDE_RESOLUTION,
     STANDARD_DEPTHS,
 )
-from app.model.interface import ModelInferenceInput, OceanEmbedModel, PlaceholderOceanEmbedModel
+from app.model.interface import ModelInferenceInput, OceanEmbedModel
 from app.schemas.oceanembed import TemperatureFieldMetadata, TemperatureResponse
 
 
@@ -21,22 +21,29 @@ def _nearest_grid_index(value: float, minimum: float, maximum: float, resolution
         return 0
     if value >= maximum:
         return max(length - 1, 0)
-    return min(max(int(round((maximum - value) / resolution)), 0), length - 1)
+    return min(max(int(round((value - minimum) / resolution)), 0), max(length - 1, 0))
 
 
 def _subset_temperature_values(values: list[list[float | None]], latitude_min, latitude_max, longitude_min, longitude_max):
     if not values:
         return values
 
-    start_lat = _nearest_grid_index(latitude_max if latitude_max is not None else MODEL_LATITUDE_MAX, MODEL_LATITUDE_MIN, MODEL_LATITUDE_MAX, MODEL_LATITUDE_RESOLUTION, len(values))
-    end_lat = _nearest_grid_index(latitude_min if latitude_min is not None else MODEL_LATITUDE_MIN, MODEL_LATITUDE_MIN, MODEL_LATITUDE_MAX, MODEL_LATITUDE_RESOLUTION, len(values))
-    lat_start = min(start_lat, end_lat)
-    lat_end = max(start_lat, end_lat)
+    lat_count = len(values)
+    lon_count = len(values[0]) if values and values[0] else 0
+    lat_min = latitude_min if latitude_min is not None else MODEL_LATITUDE_MIN
+    lat_max = latitude_max if latitude_max is not None else MODEL_LATITUDE_MAX
+    lon_min = longitude_min if longitude_min is not None else MODEL_LONGITUDE_MIN
+    lon_max = longitude_max if longitude_max is not None else MODEL_LONGITUDE_MAX
 
-    start_lon = _nearest_grid_index(longitude_min if longitude_min is not None else MODEL_LONGITUDE_MIN, MODEL_LONGITUDE_MIN, MODEL_LONGITUDE_MAX, MODEL_LONGITUDE_RESOLUTION, len(values[0]))
-    end_lon = _nearest_grid_index(longitude_max if longitude_max is not None else MODEL_LONGITUDE_MAX, MODEL_LONGITUDE_MIN, MODEL_LONGITUDE_MAX, MODEL_LONGITUDE_RESOLUTION, len(values[0]))
-    lon_start = min(start_lon, end_lon)
-    lon_end = max(start_lon, end_lon)
+    row_start = _nearest_grid_index(lat_max, MODEL_LATITUDE_MIN, MODEL_LATITUDE_MAX, MODEL_LATITUDE_RESOLUTION, lat_count)
+    row_end = _nearest_grid_index(lat_min, MODEL_LATITUDE_MIN, MODEL_LATITUDE_MAX, MODEL_LATITUDE_RESOLUTION, lat_count)
+    lat_start = min(row_start, row_end)
+    lat_end = max(row_start, row_end)
+
+    col_start = _nearest_grid_index(lon_min, MODEL_LONGITUDE_MIN, MODEL_LONGITUDE_MAX, MODEL_LONGITUDE_RESOLUTION, lon_count)
+    col_end = _nearest_grid_index(lon_max, MODEL_LONGITUDE_MIN, MODEL_LONGITUDE_MAX, MODEL_LONGITUDE_RESOLUTION, lon_count)
+    lon_start = min(col_start, col_end)
+    lon_end = max(col_start, col_end)
 
     return [row[lon_start : lon_end + 1] for row in values[lat_start : lat_end + 1]]
 
@@ -52,7 +59,7 @@ def get_temperature(
 ) -> TemperatureResponse:
     """Return a temperature field for a supported date and standard depth."""
     if model is None:
-        model = PlaceholderOceanEmbedModel()
+        raise ValueError("Temperature service requires an OceanEmbedModel instance.")
 
     if depth not in STANDARD_DEPTHS:
         valid_depths = ", ".join(str(value) for value in STANDARD_DEPTHS)
@@ -63,20 +70,17 @@ def get_temperature(
 
     request = ModelInferenceInput(
         date=selected_date,
+        depth=depth,
         latitude_min=latitude_min,
         latitude_max=latitude_max,
         longitude_min=longitude_min,
         longitude_max=longitude_max,
-        depth=depth,
     )
+    prediction = model.infer_temperature_field(request)
+    values = prediction.values
 
-    try:
-        prediction = model.infer_temperature_field(request)
-        values = prediction.values
-    except NotImplementedError:
-        values = [[None for _ in range(MODEL_GRID_COLS)] for _ in range(MODEL_GRID_ROWS)]
-
-    values = _subset_temperature_values(values, latitude_min, latitude_max, longitude_min, longitude_max)
+    if latitude_min is not None or latitude_max is not None or longitude_min is not None or longitude_max is not None:
+        values = _subset_temperature_values(values, latitude_min, latitude_max, longitude_min, longitude_max)
 
     bounds = {
         "latitude_min": latitude_min if latitude_min is not None else MODEL_LATITUDE_MIN,

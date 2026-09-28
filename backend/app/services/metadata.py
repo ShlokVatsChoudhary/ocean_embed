@@ -1,11 +1,13 @@
 from app.core.constants import MODEL_AVAILABLE_DATES, STANDARD_DEPTHS
-from app.model.interface import PlaceholderOceanEmbedModel
+from app.data.glorys import GlorysDataAccessor
+from app.model.adapter import OceanEmbedModelAdapter
 from app.schemas.oceanembed import MetadataResponse
 
 
 def get_metadata() -> MetadataResponse:
     """Return metadata derived from the canonical backend/model constants."""
-    model = PlaceholderOceanEmbedModel()
+    model = OceanEmbedModelAdapter()
+    glorys_source = GlorysDataAccessor()
     available_dates = [date.isoformat() for date in model.available_dates()]
     return MetadataResponse(
         dataset_name="OceanEmbed",
@@ -19,4 +21,6 @@ def get_metadata() -> MetadataResponse:
             "units": "degrees",
         },
         supported_variables=["temperature"],
+        glorys_status=glorys_source.status.value,
+        glorys_provenance=glorys_source.provenance,
     )

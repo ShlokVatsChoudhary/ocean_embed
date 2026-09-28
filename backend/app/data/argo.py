@@ -10,11 +10,19 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from app.data.interfaces import ArgoDataSource
+from app.data.interfaces import ArgoDataSource, DataSourceStatus
 
 
 class ArgoDataAccessor(ArgoDataSource):
     """Placeholder ARGO accessor that raises a clear error until data is available."""
+
+    @property
+    def status(self) -> DataSourceStatus:
+        return DataSourceStatus.UNAVAILABLE
+
+    @property
+    def provenance(self) -> str:
+        return "ARGO data is unavailable in this environment."
 
     def is_available(self) -> bool:
         return False

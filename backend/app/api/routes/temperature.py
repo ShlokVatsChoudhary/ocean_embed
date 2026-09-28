@@ -2,7 +2,8 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.model.interface import OceanEmbedModel, PlaceholderOceanEmbedModel
+from app.model.adapter import OceanEmbedModelAdapter
+from app.model.interface import OceanEmbedModel
 from app.schemas.oceanembed import TemperatureResponse
 from app.services.temperature import get_temperature as get_temperature_service
 from app.validation import (
@@ -18,7 +19,7 @@ router = APIRouter(prefix="/api/temperature", tags=["temperature"])
 
 def get_temperature_model() -> OceanEmbedModel:
     """Return the configured model implementation for temperature-field requests."""
-    return PlaceholderOceanEmbedModel()
+    return OceanEmbedModelAdapter()
 
 
 @router.get("", response_model=TemperatureResponse, summary="Return a temperature field for a requested date and depth")

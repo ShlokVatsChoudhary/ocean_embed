@@ -25,6 +25,8 @@ class MetadataResponse(BaseModel):
         }
     )
     supported_variables: list[str] = Field(default_factory=lambda: ["temperature"])
+    glorys_status: str = "bundled_sample"
+    glorys_provenance: str = "Bundled sample data is being used; this is not live GLORYS data."
 
 
 class TemperatureRequest(BaseModel):
@@ -113,6 +115,8 @@ class ComparisonResponse(BaseModel):
     oceanembed_temperature: float | None = None
     glorys_temperature: float | None = None
     difference: float | None = None
+    glorys_status: str = "bundled_sample"
+    glorys_provenance: str = "Bundled sample data is being used; this is not live GLORYS data."
     unit: str = "degC"
 
 

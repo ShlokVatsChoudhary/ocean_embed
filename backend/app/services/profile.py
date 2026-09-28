@@ -1,7 +1,7 @@
 from datetime import date
 
 from app.core.constants import STANDARD_DEPTHS
-from app.model.interface import ModelInferenceInput, OceanEmbedModel, PlaceholderOceanEmbedModel
+from app.model.interface import ModelInferenceInput, OceanEmbedModel
 from app.schemas.oceanembed import ProfilePoint, ProfileResponse
 from app.validation import validate_model_date, validate_standard_depth
 
@@ -15,7 +15,7 @@ def get_profile(
 ) -> ProfileResponse:
     """Return a profile built from the model's raw 15-depth output."""
     if model is None:
-        model = PlaceholderOceanEmbedModel()
+        raise ValueError("Profile service requires an OceanEmbedModel instance.")
 
     validate_model_date(selected_date)
     if depth is not None:

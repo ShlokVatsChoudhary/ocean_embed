@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.data.glorys import GlorysDataAccessor
 from app.data.interfaces import GlorysDataSource
-from app.model.interface import OceanEmbedModel, PlaceholderOceanEmbedModel
+from app.model.adapter import OceanEmbedModelAdapter
+from app.model.interface import OceanEmbedModel
 from app.schemas.oceanembed import ComparisonResponse
 from app.services.comparison import get_comparison as get_comparison_service
 from app.validation import validate_latitude, validate_longitude, validate_model_date, validate_standard_depth
@@ -14,7 +15,7 @@ router = APIRouter(prefix="/api/comparison", tags=["comparison"])
 
 def get_comparison_model() -> OceanEmbedModel:
     """Return the configured model implementation for comparison requests."""
-    return PlaceholderOceanEmbedModel()
+    return OceanEmbedModelAdapter()
 
 
 def get_comparison_glorys_source() -> GlorysDataSource:

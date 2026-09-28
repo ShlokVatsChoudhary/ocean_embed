@@ -42,7 +42,7 @@ def validate_standard_depth(value: float, field_name: str = "depth") -> float:
 def validate_model_date(value: object, field_name: str = "date") -> object:
     """Validate that the requested date is available in the model window."""
     if value not in MODEL_AVAILABLE_DATES:
-        raise ValueError(f"Data unavailable for {value}. Model data is available from 2020-01-01 to 2020-03-31.")
+        raise ValueError(f"Data unavailable for {value}. Model data is available from 2020-01-01 to 2020-01-07.")
     return value
 
 

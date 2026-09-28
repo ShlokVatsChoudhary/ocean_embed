@@ -1,8 +1,8 @@
 from datetime import date
 
 from app.data.glorys import GlorysDataAccessor
-from app.data.interfaces import GlorysDataSource
-from app.model.interface import ModelInferenceInput, OceanEmbedModel, PlaceholderOceanEmbedModel
+from app.data.interfaces import DataSourceStatus, GlorysDataSource
+from app.model.interface import ModelInferenceInput, OceanEmbedModel
 from app.schemas.oceanembed import ComparisonResponse
 
 
@@ -43,6 +43,20 @@ def _extract_point_temperature_from_model(model: OceanEmbedModel, latitude: floa
     )
 
 
+def _status_value(source: object) -> str:
+    status = getattr(source, "status", None)
+    if status is None:
+        return DataSourceStatus.UNAVAILABLE.value
+    return status.value if hasattr(status, "value") else str(status)
+
+
+def _provenance_value(source: object) -> str:
+    provenance = getattr(source, "provenance", None)
+    if provenance is None:
+        return "GLORYS data is unavailable in this environment."
+    return str(provenance)
+
+
 def get_comparison(
     latitude: float,
     longitude: float,
@@ -53,20 +67,17 @@ def get_comparison(
 ) -> ComparisonResponse:
     """Compare a single OceanEmbed point temperature against a GLORYS point temperature."""
     if model is None:
-        model = PlaceholderOceanEmbedModel()
+        raise ValueError("Comparison service requires an OceanEmbedModel instance.")
     if glorys_source is None:
         glorys_source = GlorysDataAccessor()
 
-    try:
-        oceanembed_temperature = _extract_point_temperature_from_model(
-            model,
-            latitude=latitude,
-            longitude=longitude,
-            selected_date=selected_date,
-            depth=depth,
-        )
-    except NotImplementedError:
-        oceanembed_temperature = None
+    oceanembed_temperature = _extract_point_temperature_from_model(
+        model,
+        latitude=latitude,
+        longitude=longitude,
+        selected_date=selected_date,
+        depth=depth,
+    )
 
     try:
         glorys_payload = glorys_source.get_point_temperature(
@@ -75,9 +86,10 @@ def get_comparison(
             target_date=selected_date,
             depth=depth,
         )
-        glorys_temperature = _extract_temperature_value(glorys_payload)
-    except NotImplementedError:
-        glorys_temperature = None
+    except (RuntimeError, ValueError, FileNotFoundError):
+        glorys_payload = None
+
+    glorys_temperature = _extract_temperature_value(glorys_payload)
 
     if oceanembed_temperature is None or glorys_temperature is None:
         difference = None
@@ -92,5 +104,7 @@ def get_comparison(
         oceanembed_temperature=oceanembed_temperature,
         glorys_temperature=glorys_temperature,
         difference=difference,
+        glorys_status=_status_value(glorys_source),
+        glorys_provenance=_provenance_value(glorys_source),
         unit="degC",
     )

@@ -3,7 +3,8 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.constants import STANDARD_DEPTHS
-from app.model.interface import OceanEmbedModel, PlaceholderOceanEmbedModel
+from app.model.adapter import OceanEmbedModelAdapter
+from app.model.interface import OceanEmbedModel
 from app.schemas.oceanembed import ProfileResponse
 from app.services.profile import get_profile as get_profile_service
 from app.validation import validate_latitude, validate_longitude, validate_model_date, validate_standard_depth
@@ -13,7 +14,7 @@ router = APIRouter(prefix="/api/profile", tags=["profile"])
 
 def get_profile_model() -> OceanEmbedModel:
     """Return the configured ML model implementation for profile inference."""
-    return PlaceholderOceanEmbedModel()
+    return OceanEmbedModelAdapter()
 
 
 @router.get("", response_model=ProfileResponse, summary="Return a depth profile for a point location and date")

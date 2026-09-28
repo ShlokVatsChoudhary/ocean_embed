@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from app.api.routes.comparison import get_comparison_glorys_source, get_comparison_model
 from app.api.routes.profile import get_profile_model
 from app.core.constants import MODEL_AVAILABLE_DATES, STANDARD_DEPTHS
-from app.data.interfaces import GlorysDataSource
+from app.data.interfaces import DataSourceStatus, GlorysDataSource
 from app.main import app
 from app.model.interface import ModelInferenceInput, ModelTemperaturePrediction, OceanEmbedModel
 from app.services.comparison import get_comparison
@@ -48,12 +48,25 @@ class FakeComparisonModel(OceanEmbedModel):
 
 
 class FakeGlorysSource(GlorysDataSource):
-    def __init__(self, temperature):
+    def __init__(self, temperature, status=DataSourceStatus.BUNDLED_SAMPLE):
         self.temperature = temperature
         self.received_request = None
+        self._status = status
+
+    @property
+    def status(self) -> DataSourceStatus:
+        return self._status
+
+    @property
+    def provenance(self) -> str:
+        if self.status == DataSourceStatus.LIVE:
+            return "Live GLORYS data source configured for this deployment."
+        if self.status == DataSourceStatus.BUNDLED_SAMPLE:
+            return "GLORYS data source status: bundled_sample; bundled sample values are being used and are not live GLORYS data."
+        return "GLORYS data is unavailable in this environment."
 
     def is_available(self) -> bool:
-        return True
+        return self.status != DataSourceStatus.UNAVAILABLE
 
     def get_temperature_field(self, **kwargs):
         raise NotImplementedError
@@ -79,10 +92,12 @@ def test_service_metadata_contract():
     assert response.available_dates == [date.isoformat() for date in MODEL_AVAILABLE_DATES]
     assert len(response.available_depths) == 15
     assert all(depth in STANDARD_DEPTHS for depth in response.available_depths)
+    assert response.glorys_status == "bundled_sample"
+    assert "not live glorys data" in response.glorys_provenance.lower()
 
 
 def test_service_temperature_contract():
-    response = get_temperature(date(2020, 1, 1), 10.0)
+    response = get_temperature(date(2020, 1, 1), 10.0, model=FakeComparisonModel(12.0))
     assert response.metadata.date == date(2020, 1, 1)
     assert response.metadata.depth == 10.0
 
@@ -99,23 +114,24 @@ def test_service_profile_contract():
 
 def test_profile_model_mapping_and_validation():
     model = FakeProfileModel()
-    response = get_profile(12.5, 21.5, date(2020, 2, 3), model=model)
+    selected_date = date(2020, 1, 3)
+    response = get_profile(12.5, 21.5, selected_date, model=model)
 
     assert model.received_request.latitude == 12.5
     assert model.received_request.longitude == 21.5
-    assert model.received_request.date == date(2020, 2, 3)
+    assert model.received_request.date == selected_date
     assert response.profile[0].depth == STANDARD_DEPTHS[0]
     assert response.profile[0].temperature == 0.0
     assert response.profile[-1].depth == STANDARD_DEPTHS[-1]
     assert response.profile[-1].temperature == 14.0
 
-    filtered = get_profile(12.5, 21.5, date(2020, 2, 3), model=model, depth=125.0)
+    filtered = get_profile(12.5, 21.5, selected_date, model=model, depth=125.0)
     assert len(filtered.profile) == 1
     assert filtered.profile[0].depth == 125.0
     assert filtered.profile[0].temperature == 8.0
 
     try:
-        get_profile(12.5, 21.5, date(2020, 2, 3), model=model, depth=15.0)
+        get_profile(12.5, 21.5, selected_date, model=model, depth=15.0)
         raise AssertionError("Expected ValueError for unsupported depth")
     except ValueError as exc:
         assert "standard profile depths" in str(exc)
@@ -159,9 +175,32 @@ def test_profile_route_response_is_valid():
 
 
 def test_service_comparison_contract():
-    response = get_comparison(10.0, 20.0, date(2020, 1, 1), 10.0)
+    response = get_comparison(
+        10.0,
+        20.0,
+        date(2020, 1, 1),
+        10.0,
+        model=FakeComparisonModel(12.0),
+        glorys_source=FakeGlorysSource(9.0, status=DataSourceStatus.BUNDLED_SAMPLE),
+    )
     assert response.depth == 10.0
     assert response.unit == "degC"
+    assert response.glorys_status == "bundled_sample"
+    assert "not live glorys data" in response.glorys_provenance.lower()
+
+
+def test_comparison_exposes_glorys_provenance():
+    response = get_comparison(10.0, 20.0, date(2020, 1, 1), 10.0, model=FakeComparisonModel(12.0), glorys_source=FakeGlorysSource(9.0, status=DataSourceStatus.BUNDLED_SAMPLE))
+    assert response.glorys_status == "bundled_sample"
+    assert "not live glorys data" in response.glorys_provenance.lower()
+
+    live_response = get_comparison(10.0, 20.0, date(2020, 1, 1), 10.0, model=FakeComparisonModel(12.0), glorys_source=FakeGlorysSource(9.0, status=DataSourceStatus.LIVE))
+    assert live_response.glorys_status == "live"
+    assert "Live GLORYS" in live_response.glorys_provenance
+
+    unavailable_response = get_comparison(10.0, 20.0, date(2020, 1, 1), 10.0, model=FakeComparisonModel(12.0), glorys_source=FakeGlorysSource(9.0, status=DataSourceStatus.UNAVAILABLE))
+    assert unavailable_response.glorys_status == "unavailable"
+    assert "unavailable" in unavailable_response.glorys_provenance.lower()
 
 
 def test_comparison_difference_calculation():

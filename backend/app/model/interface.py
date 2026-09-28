@@ -121,7 +121,7 @@ class OceanEmbedModel(ABC):
             return 0
         if value >= max_value:
             return max(length - 1, 0)
-        fraction = (max_value - value) / resolution
+        fraction = (value - min_value) / resolution
         return min(max(int(round(fraction)), 0), length - 1)
 
 
