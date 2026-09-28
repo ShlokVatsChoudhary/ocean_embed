@@ -99,9 +99,9 @@ export default function ValidateView({ date, setDate, depth, setDepth, selected,
           {summary ? (
             <>
               <div className="metric-row">
-                <SkillMetricCard label="ARGO profiles" value={summary.nProfiles.toLocaleString()} />
-                <SkillMetricCard label="Mean |error|" value={summary.meanError.toFixed(2)} unit=" °C" />
-                <SkillMetricCard label="Correlation" value={summary.correlation.toFixed(3)} />
+                <SkillMetricCard label="ARGO profiles" value={summary.nProfiles == null ? 'Unavailable' : summary.nProfiles.toLocaleString()} />
+                <SkillMetricCard label="Mean |error|" value={summary.meanError == null ? 'Unavailable' : summary.meanError.toFixed(2)} unit={summary.meanError == null ? '' : ' °C'} />
+                <SkillMetricCard label="Correlation" value={summary.correlation == null ? 'Unavailable' : summary.correlation.toFixed(3)} />
               </div>
               <div className="muted small">Date range: {summary.dateRange}</div>
             </>
