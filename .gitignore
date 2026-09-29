@@ -30,3 +30,9 @@ Thumbs.db
 # Local data
 data/raw/
 data/processed/
+
+# Bundled ARGO validation archive (~590 KB) is small enough to ship with the repo so the
+# demo works out of the box. Larger archives stay out of git and are fetched by
+# backend/scripts/fetch_argo.py.
+!backend/data/argo/
+!backend/data/argo/*.nc

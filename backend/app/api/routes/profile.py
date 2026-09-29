@@ -3,7 +3,6 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.constants import STANDARD_DEPTHS
-from app.model.adapter import OceanEmbedModelAdapter
 from app.model.interface import OceanEmbedModel
 from app.schemas.oceanembed import ProfileResponse
 from app.services.profile import get_profile as get_profile_service
@@ -11,10 +10,12 @@ from app.validation import validate_latitude, validate_longitude, validate_model
 
 router = APIRouter(prefix="/api/profile", tags=["profile"])
 
+from app.api.deps import get_model as _get_model
+
 
 def get_profile_model() -> OceanEmbedModel:
-    """Return the configured ML model implementation for profile inference."""
-    return OceanEmbedModelAdapter()
+    """Route-level dependency so tests can override the model without touching the cache."""
+    return _get_model()
 
 
 @router.get("", response_model=ProfileResponse, summary="Return a depth profile for a point location and date")

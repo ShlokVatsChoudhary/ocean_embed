@@ -2,11 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import MapHeatmap from '../components/MapHeatmap';
 import { DepthSlider, DateControl, CompareModeSwitch, SkillMetricCard } from '../components/controls';
 import { VerticalProfileChart } from '../components/charts';
-import { getTemperatureField, getVerticalProfile, getSkillMetrics, getComparison, prettyDate, SUPPORTED_DATES } from '../api/oceanembed';
+import { getTemperatureField, getVerticalProfile, getSkillMetrics, getComparison, prettyDate, getSupportedDates } from '../api/oceanembed';
 
 export default function ExploreView({ date, setDate, depth, setDepth, selected, setSelected }) {
   const [mode, setMode] = useState('model');
-  const [showConf, setShowConf] = useState(false);
+  const [showCoverage, setShowCoverage] = useState(false);
+  const [loopDateList, setLoopDateList] = useState([]);
   const [playing, setPlaying] = useState(false);
   const [buffering, setBuffering] = useState(false);
   const [frameIdx, setFrameIdx] = useState(0);
@@ -92,7 +93,8 @@ export default function ExploreView({ date, setDate, depth, setDepth, selected, 
     setBuffering(true);
     try {
       const frames = [];
-      for (const iso of SUPPORTED_DATES) {
+      const candidates = loopDateList.length ? loopDateList : await getSupportedDates();
+      for (const iso of candidates) {
         const field = await getTemperatureField({ date: iso, depth });
         if (field) {
           cacheRef.current.set(cacheKey(iso, depth, 'oceanembed'), field);
@@ -114,6 +116,13 @@ export default function ExploreView({ date, setDate, depth, setDepth, selected, 
   };
 
   useEffect(() => () => clearInterval(timer.current), []);
+
+  // The backend is authoritative for which dates the model covers.
+  useEffect(() => {
+    let dead = false;
+    getSupportedDates().then((dates) => { if (!dead) setLoopDateList(dates); }).catch(() => {});
+    return () => { dead = true; };
+  }, []);
 
   const shown = mode === 'model' ? modelF : null;
   const range = useMemo(() => {
@@ -143,7 +152,7 @@ export default function ExploreView({ date, setDate, depth, setDepth, selected, 
               field={shown}
               mode='sequential'
               fixedRange={range}
-              selected={selected} showConfidence={showConf} onSelect={setSelected}
+              selected={selected} showCoverage={showCoverage} onSelect={setSelected}
             />
           ) : mode !== 'model' ? (
             <div className="loading-panel" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#5d6b7a', fontWeight: 600 }}>
@@ -158,10 +167,10 @@ export default function ExploreView({ date, setDate, depth, setDepth, selected, 
         <div className="map-controls">
           {playing
             ? <button className="btn" onClick={stop}>⏸ Pause animation</button>
-            : <button className="btn" onClick={startLoop} disabled={buffering}>{buffering ? 'Buffering…' : '▶ Animate 7 days'}</button>}
+            : <button className="btn" onClick={startLoop} disabled={buffering}>{buffering ? 'Buffering…' : `▶ Animate ${loopDateList.length || 7} days`}</button>}
           <label className="check">
-            <input type="checkbox" checked={showConf} onChange={(e) => setShowConf(e.target.checked)} />
-            Confidence shading (dim = high uncertainty)
+            <input type="checkbox" checked={showCoverage} onChange={(e) => setShowCoverage(e.target.checked)} />
+            Show coverage (dim = no model value)
           </label>
         </div>
         <div className="muted small">

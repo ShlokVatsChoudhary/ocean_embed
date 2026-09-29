@@ -40,7 +40,6 @@ export default function AnalyzeView({ date, setDate, depth, setDepth, selected, 
     return () => { dead = true; };
   }, [date, selected]);
 
-  const markers = floats.map((f) => ({ lat: f.lat, lon: f.lon, kind: 'argo' }));
 
   const loadFloat = (id) => {
     const f = floats.find((x) => x.id === id);

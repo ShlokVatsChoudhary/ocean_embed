@@ -28,6 +28,13 @@ from app.model.interface import (
 )
 
 
+# Process-wide caches. The model root is the cache key so that a different
+# OCEANEMBED_MODEL_ROOT still gets its own runtime, but the common case (one
+# deployment) loads TensorFlow weights exactly once.
+_TF_RUNTIME_CACHE: dict[str, tuple[object, object, tuple, list]] = {}
+_PREDICTION_CACHE: dict[tuple[str, str], "np.ndarray"] = {}
+
+
 def _nearest_grid_index(value: float, minimum: float, maximum: float, resolution: float, length: int) -> int:
     if value <= minimum:
         return 0
@@ -84,6 +91,16 @@ class OceanEmbedModelAdapter(OceanEmbedModel):
                 f"{model_dir / 'weights' / 'model_2020.weights.h5'}"
             ) from exc
 
+        cache_key = str(model_dir)
+        cached = _TF_RUNTIME_CACHE.get(cache_key)
+        if cached is not None:
+            model, ps66_data, sample, dates = cached
+            self._tf_model = model
+            self._sample_cache = sample
+            self._sample_dates = dates
+            self._tf_model_imports = (ps66_data, model)
+            return model
+
         weights_path = model_dir / "weights" / "model_2020.weights.h5"
         if not weights_path.exists():
             raise FileNotFoundError(f"PS66 weights not found at {weights_path}.")
@@ -104,6 +121,7 @@ class OceanEmbedModelAdapter(OceanEmbedModel):
         self._sample_cache = (X, Y, stats, list(channels))
         self._sample_dates = list(MODEL_AVAILABLE_DATES)
         self._tf_model_imports = (ps66_data, model)
+        _TF_RUNTIME_CACHE[cache_key] = (model, ps66_data, self._sample_cache, self._sample_dates)
         return self._tf_model
 
     def _load_sample_arrays(self) -> tuple[np.ndarray, np.ndarray, dict[str, np.ndarray], list[str]]:
@@ -136,23 +154,36 @@ class OceanEmbedModelAdapter(OceanEmbedModel):
         return sample_dates.index(target_date)
 
     def _predict_field_for_date(self, target_date: date) -> np.ndarray:
+        cache_key = (str(self.model_root), target_date.isoformat())
+        cached = _PREDICTION_CACHE.get(cache_key)
+        if cached is not None:
+            return cached
+
         X, Y, stats, channels = self._load_sample_arrays()
         date_index = self._date_index_for_request(target_date)
-        x_input = np.nan_to_num(X[date_index], nan=0.0).astype(np.float32)
 
-        x_norm = x_input.copy()
-        for i, channel_name in enumerate(channels):
-            channel_key = str(channel_name)
-            mean = float(stats[f"x_mean_{channel_key}"])
-            std = float(stats[f"x_std_{channel_key}"]) + 1e-6
-            x_norm[i] = (x_input[i] - mean) / std
+        # Normalise first, then replace missing (land) values with 0.0.
+        #
+        # Order matters and is easy to get wrong: land is NaN in the raw channels, so
+        # replacing NaN before normalising turns land into (0 - mean) / std, which for
+        # SST is about -16. The 3x3 convolutions then smear that value into the
+        # surrounding ocean and the whole field degrades (verified: in-sample RMSE rises
+        # from ~0.40 degC to ~4.70 degC). Normalising first makes land exactly 0.0, the
+        # network's neutral value.
+        ps66_data, _ = self._tf_model_imports  # type: ignore[misc]
+        x_series, _ = ps66_data.normalize(
+            X[date_index : date_index + 1], Y[date_index : date_index + 1], stats, channels
+        )
+        x_norm = np.nan_to_num(x_series[0], nan=0.0).astype(np.float32)
 
         model = self._load_ps66_runtime()
         batched = np.expand_dims(x_norm, axis=0)
         prediction, _ = model(tf.convert_to_tensor(batched, dtype=tf.float32), training=False)
         prediction = prediction.numpy()[0]
         denormalized = prediction * (float(stats["y_std"]) + 1e-6) + float(stats["y_mean"])
-        return np.where(np.isfinite(Y[date_index]), denormalized, np.nan)
+        field = np.where(np.isfinite(Y[date_index]), denormalized, np.nan)
+        _PREDICTION_CACHE[cache_key] = field
+        return field
 
     def _output_field(self, request: ModelInferenceInput) -> np.ndarray:
         field = self._predict_field_for_date(request.date)
@@ -217,6 +248,15 @@ class OceanEmbedModelAdapter(OceanEmbedModel):
                 "source": "PS66 Keras model via model_2020.weights.h5",
             },
         )
+
+    def temperature_field_array(self, target_date: date) -> "np.ndarray":
+        """Return the full ``(15, 101, 241)`` predicted field for a date.
+
+        Public counterpart of ``_predict_field_for_date`` so that services can
+        compare whole fields (validation) instead of asking the model for one
+        point at a time.
+        """
+        return self._predict_field_for_date(target_date)
 
     def _nearest_valid_grid_point(self, field: np.ndarray, latitude: float, longitude: float) -> tuple[int, int]:
         lat_index = _nearest_grid_index(

@@ -2,9 +2,9 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.model.adapter import OceanEmbedModelAdapter
+from app.api.deps import get_model as _get_model
 from app.model.interface import OceanEmbedModel
-from app.schemas.oceanembed import TemperatureResponse
+from app.schemas.oceanembed import CoverageResponse, TemperatureResponse
 from app.services.temperature import get_temperature as get_temperature_service
 from app.validation import (
     validate_geographic_bounds,
@@ -18,8 +18,42 @@ router = APIRouter(prefix="/api/temperature", tags=["temperature"])
 
 
 def get_temperature_model() -> OceanEmbedModel:
-    """Return the configured model implementation for temperature-field requests."""
-    return OceanEmbedModelAdapter()
+    """Route-level dependency so tests can override the model without touching the cache."""
+    return _get_model()
+
+
+@router.get(
+    "/coverage",
+    response_model=CoverageResponse,
+    summary="Return the fraction of grid cells with a finite value",
+)
+async def get_coverage(
+    selected_date: date = Query(..., alias="date", description="Date for the coverage calculation."),
+    depth: float = Query(..., ge=0, description="Depth level in meters."),
+    model: OceanEmbedModel = Depends(get_temperature_model),
+) -> CoverageResponse:
+    try:
+        validate_model_date(selected_date)
+        validate_standard_depth(depth)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    import numpy as np
+
+    from app.core.constants import STANDARD_DEPTHS
+
+    field = model.temperature_field_array(selected_date)
+    layer = np.asarray(field[STANDARD_DEPTHS.index(depth)], dtype="float64")
+    valid = int(np.isfinite(layer).sum())
+    total = int(layer.size)
+    return CoverageResponse(
+        date=selected_date,
+        depth=depth,
+        grid_shape=[int(layer.shape[0]), int(layer.shape[1])],
+        valid_cells=valid,
+        total_cells=total,
+        coverage=float(valid / total) if total else 0.0,
+    )
 
 
 @router.get("", response_model=TemperatureResponse, summary="Return a temperature field for a requested date and depth")

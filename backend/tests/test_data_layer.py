@@ -15,12 +15,20 @@ def test_data_interfaces_exist():
     assert issubclass(DataLoader, object)
 
 
-def test_argo_placeholder_raises_not_implemented():
+def test_argo_accessor_never_fabricates_observations():
+    """Without a reference file the accessor must report unavailability and return no data.
+
+    The previous behaviour was to raise NotImplementedError; the accessor is now real, so
+    what matters is that a missing archive degrades honestly instead of inventing values.
+    """
     accessor = ArgoDataAccessor()
-    with pytest.raises(NotImplementedError):
-        accessor.get_profile_by_id("profile-1")
-    with pytest.raises(NotImplementedError):
-        accessor.get_validation_observations(date=None)
+    if accessor.is_available():
+        pytest.skip("Bundled ARGO archive is present; see test_argo_validation.py for the real path.")
+
+    assert accessor.status.value == "unavailable"
+    assert accessor.temperature_field(date(2020, 1, 1)) is None
+    assert accessor.observed_cells(date(2020, 1, 1)) == []
+    assert accessor.get_validation_observations(date=date(2020, 1, 1)) == []
 
 
 def test_glorys_sample_accessor_is_available_and_returns_field():

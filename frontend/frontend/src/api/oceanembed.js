@@ -1,25 +1,27 @@
 // OceanEmbed frontend API adapter for the canonical FastAPI contracts.
 //
-// The backend is the source of truth for request/response shapes. The frontend keeps
-// its existing UI-facing shapes, but it now maps directly to the backend contracts that
-// were intentionally designed first: /api/metadata, /api/temperature, /api/profile,
-// /api/comparison, and /api/validation.
+// The backend is the source of truth for request/response shapes:
+// /api/metadata, /api/temperature, /api/temperature/coverage, /api/profile,
+// /api/comparison, /api/validation, /api/argo/floats and /api/argo/alerts.
 //
-// When the backend has not implemented real scientific data yet, the frontend keeps the
-// state explicitly empty/unavailable instead of inventing values.
+// There are no mock generators. When the backend is unreachable or a dataset is
+// unavailable, these functions return an explicit empty/unavailable value so the UI can
+// say "unavailable" instead of showing invented numbers.
 
 export const STANDARD_DEPTHS = [0.0, 5.0, 10.0, 20.0, 30.0, 50.0, 75.0, 100.0, 125.0, 150.0, 200.0, 300.0, 500.0, 700.0, 1000.0];
 export const BBOX = { latMin: 5, latMax: 30, lonMin: 45, lonMax: 105 };
 export const GRID = { nLat: 101, nLon: 241 };
 export const MODEL_VERSION = 'oceanembed-v0.3-real';
-export const LAST_UPDATE = '2020-01-07';
+
+//: Fallback list, used only until /api/metadata answers. The backend is authoritative.
 export const SUPPORTED_DATES = ['2020-01-01', '2020-01-02', '2020-01-03', '2020-01-04', '2020-01-05', '2020-01-06', '2020-01-07'];
+export const LAST_UPDATE = SUPPORTED_DATES[SUPPORTED_DATES.length - 1];
 
 const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '');
 export const isBackendEnabled = () => API_BASE.length > 0;
 export const getApiBase = () => API_BASE;
 
-async function getJSON(path, params = {}, timeoutMs = 12000) {
+async function getJSON(path, params = {}, timeoutMs = 30000) {
   const qs = new URLSearchParams(Object.fromEntries(
     Object.entries(params).filter(([, v]) => v !== undefined && v !== null).map(([k, v]) => [k, String(v)])
   )).toString();
@@ -34,124 +36,28 @@ async function getJSON(path, params = {}, timeoutMs = 12000) {
   }
 }
 
-// --- tolerant normalizers: accept camelCase or snake_case, flat or 2D values ---
+async function fetchBackend(label, path, params = {}, timeoutMs = 30000) {
+  if (!isBackendEnabled()) return null;
+  try {
+    return await getJSON(path, params, timeoutMs);
+  } catch (e) {
+    console.warn(`[oceanembed] backend ${label} unavailable:`, e.message);
+    return null;
+  }
+}
+
+// ---------------------------------- helpers
 function toNum(x, fallback = 0) {
   const n = Number(x);
   return Number.isFinite(n) ? n : fallback;
 }
 
-function hasUsableTemperatureValues(values) {
-  if (!Array.isArray(values) || values.length === 0) return false;
-  return values.some((row) => {
-    if (Array.isArray(row)) {
-      return row.some((v) => v !== null && v !== undefined && Number.isFinite(Number(v)));
-    }
-    return row !== null && row !== undefined && Number.isFinite(Number(row));
-  });
+function numOrNull(x) {
+  if (x === null || x === undefined || x === '') return null;
+  const n = Number(x);
+  return Number.isFinite(n) ? n : null;
 }
 
-function normalizeField(raw, { date, depth, source }) {
-  if (!raw || typeof raw !== 'object') return null;
-
-  const values = Array.isArray(raw.values) ? raw.values : [];
-  if (!hasUsableTemperatureValues(values)) return null;
-
-  const bounds = raw.metadata && typeof raw.metadata === 'object' ? raw.metadata.bounds ?? {} : {};
-  const latMin = Number.isFinite(Number(bounds.latitude_min)) ? Number(bounds.latitude_min) : BBOX.latMin;
-  const latMax = Number.isFinite(Number(bounds.latitude_max)) ? Number(bounds.latitude_max) : BBOX.latMax;
-  const lonMin = Number.isFinite(Number(bounds.longitude_min)) ? Number(bounds.longitude_min) : BBOX.lonMin;
-  const lonMax = Number.isFinite(Number(bounds.longitude_max)) ? Number(bounds.longitude_max) : BBOX.lonMax;
-
-  const stepLat = 0.25;
-  const stepLon = 0.25;
-  const latCount = Math.round((latMax - latMin) / stepLat) + 1;
-  const lonCount = Math.round((lonMax - lonMin) / stepLon) + 1;
-  const lats = Array.from({ length: latCount }, (_, i) => Number((latMin + i * stepLat).toFixed(4)));
-  const lons = Array.from({ length: lonCount }, (_, j) => Number((lonMin + j * stepLon).toFixed(4)));
-
-  const normalized = values.map((row) => {
-    if (!Array.isArray(row)) {
-      return [Number.isFinite(Number(row)) ? Number(row) : null];
-    }
-    return row.map((v) => (v !== null && v !== undefined && Number.isFinite(Number(v)) ? Number(v) : null));
-  });
-
-  const confidence = normalized.map((row) => row.map((v) => (v !== null && Number.isFinite(v) ? 1 : 0)));
-  const finite = [];
-  normalized.forEach((row) => row.forEach((v) => {
-    if (v !== null && Number.isFinite(v)) finite.push(v);
-  }));
-  const stats = finite.length > 0 ? { min: Math.min(...finite), max: Math.max(...finite) } : { min: 0, max: 0 };
-
-  return { lats, lons, values: normalized, confidence, stats, date, depth, source };
-}
-
-function normalizeProfile(raw, { date, lat, lon }) {
-  if (!raw || typeof raw !== 'object') return null;
-  const profileList = Array.isArray(raw.profile) ? raw.profile : [];
-  if (profileList.length === 0) return null;
-
-  const depths = profileList.map((p) => toNum(p.depth));
-  const oceanembed = profileList.map((p) => (p.temperature !== null && p.temperature !== undefined && Number.isFinite(Number(p.temperature)) ? Number(p.temperature) : null));
-  const glorys = Array(depths.length).fill(null);
-  const argo = null;
-  if (!oceanembed.some((v) => v !== null)) return null;
-
-  return { depths, oceanembed, glorys, argo, lat, lon, date };
-}
-
-function normalizeSkillList(raw) {
-  const arr = Array.isArray(raw) ? raw : raw?.metrics ?? raw?.skill ?? [];
-  if (!Array.isArray(arr)) return [];
-  return arr.map((m) => ({
-    depth: toNum(m.depth),
-    rmse: toNum(m.rmse),
-    mae: toNum(m.mae ?? m.rmse * 0.75),
-    bias: toNum(m.bias),
-    correlation: toNum(m.correlation ?? m.corr, 1),
-  }));
-}
-
-function normalizeFloats(raw) {
-  const arr = Array.isArray(raw) ? raw : raw?.floats ?? raw?.profiles ?? [];
-  if (!Array.isArray(arr)) return [];
-  return arr.map((f, i) => ({
-    lat: toNum(f.lat ?? f.latitude),
-    lon: toNum(f.lon ?? f.lng ?? f.longitude),
-    id: String(f.id ?? f.wmo ?? `ARGO-${i + 1}`),
-  }));
-}
-
-function normalizeAlerts(raw) {
-  const arr = Array.isArray(raw) ? raw : raw?.alerts ?? [];
-  if (!Array.isArray(arr)) return [];
-  return arr.map((a) => ({
-    lat: toNum(a.lat), lon: toNum(a.lon), depth: toNum(a.depth),
-    date: String(a.date), severity: String(a.severity ?? 'watch'),
-    text: String(a.text ?? a.message ?? 'Anomaly detected'),
-  }));
-}
-
-// ============================ mock generators ============================
-// (unchanged behaviour — used when no backend is configured or as fallback)
-
-function hashStr(s) {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-function mulberry32(seed) {
-  let a = seed >>> 0;
-  return function () {
-    a |= 0; a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
 export function fmtDate(d) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -178,152 +84,127 @@ export function dateRangeStr(start, end) {
   while (d <= stop) { out.push(fmtDate(d)); d = new Date(d.getTime() + 86400000); }
   return out;
 }
-
-function meanTemp(depth) {
-  return 4.2 + 24.6 * Math.exp(-depth / 170) + 1.1 * Math.exp(-depth / 700);
-}
-
-function spatialAnomaly(lat, lon, depth, rngEddy, dayPhase) {
-  const arabianWarm = 1.6 * Math.exp(-(((lat - 14) ** 2) / 60 + ((lon - 62) ** 2) / 120));
-  const bayWarm = 1.3 * Math.exp(-(((lat - 18) ** 2) / 70 + ((lon - 89) ** 2) / 140));
-  const latGrad = -0.09 * (lat - 15);
-  const eddy = 1.4 * Math.sin((lon * 0.55 + dayPhase) * 1.0) * Math.cos(lat * 0.5 - dayPhase * 0.7)
-    + 0.7 * Math.sin(lon * 1.3 - lat * 0.9 + dayPhase * 1.7);
-  const depthDamp = Math.exp(-depth / 450);
-  return (arabianWarm + bayWarm + latGrad) * (0.35 + 0.65 * depthDamp) + eddy * depthDamp * 0.8;
-}
-
-function gridAxes() {
-  const { nLat, nLon } = GRID;
-  const lats = Array.from({ length: nLat }, (_, i) => BBOX.latMax - (i * (BBOX.latMax - BBOX.latMin)) / (nLat - 1));
-  const lons = Array.from({ length: nLon }, (_, j) => BBOX.lonMin + (j * (BBOX.lonMax - BBOX.lonMin)) / (nLon - 1));
-  return { lats, lons };
-}
-
-function mockTemperatureField({ date, depth, source = 'oceanembed' }) {
-  const { lats, lons } = gridAxes();
-  const seed = hashStr(`${date}|${depth}|${source}`);
-  const rng = mulberry32(seed);
-  const dayPhase = (hashStr(date) % 365) / 365 * Math.PI * 2;
-  const cn = 7, cm = 8;
-  const lattice = Array.from({ length: cn }, () => Array.from({ length: cm }, () => rng() * 2 - 1));
-  const noiseAt = (fi, fj) => {
-    const x = (fj / (GRID.nLon - 1)) * (cm - 1), y = (fi / (GRID.nLat - 1)) * (cn - 1);
-    const x0 = Math.floor(x), y0 = Math.floor(y);
-    const x1 = Math.min(cm - 1, x0 + 1), y1 = Math.min(cn - 1, y0 + 1);
-    const tx = x - x0, ty = y - y0;
-    return (lattice[y0][x0] * (1 - tx) + lattice[y0][x1] * tx) * (1 - ty)
-      + (lattice[y1][x0] * (1 - tx) + lattice[y1][x1] * tx) * ty;
-  };
-  const bias = source === 'glorys' ? 0.12 + 0.0004 * depth : 0;
-  const values = [];
-  const confidence = [];
-  let min = Infinity, max = -Infinity;
-  for (let i = 0; i < GRID.nLat; i++) {
-    const row = [], crow = [];
-    for (let j = 0; j < GRID.nLon; j++) {
-      const lat = lats[i], lon = lons[j];
-      const t = meanTemp(depth)
-        + spatialAnomaly(lat, lon, depth, rng, dayPhase)
-        + noiseAt(i, j) * (0.5 + 0.35 * Math.exp(-depth / 300))
-        + bias;
-      row.push(+t.toFixed(3));
-      const c = Math.min(1, Math.max(0.15,
-        0.94 - depth / 1600
-        - 0.1 * (lat < 10 ? 1 : 0) - 0.08 * Math.abs(noiseAt(i, j))));
-      crow.push(+c.toFixed(3));
-      if (t < min) min = t; if (t > max) max = t;
-    }
-    values.push(row); confidence.push(crow);
-  }
-  return { lats, lons, values, confidence, stats: { min: +min.toFixed(2), max: +max.toFixed(2) }, date, depth, source };
-}
-
 export function nearestIndex(arr, v) {
   let bi = 0, bd = Infinity;
   arr.forEach((a, i) => { const d = Math.abs(a - v); if (d < bd) { bd = d; bi = i; } });
   return bi;
 }
 
-function mockVerticalProfile({ date, lat, lon }) {
-  const rng = mulberry32(hashStr(`prof|${date}|${lat.toFixed(2)}|${lon.toFixed(2)}`));
-  const dayPhase = (hashStr(date) % 365) / 365 * Math.PI * 2;
-  const hasArgo = rng() > 0.45;
-  const oceanembed = [], glorys = [], argo = [];
-  STANDARD_DEPTHS.forEach((d) => {
-    const base = meanTemp(d) + spatialAnomaly(lat, lon, d, rng, dayPhase);
-    const oe = base + (rng() - 0.5) * 0.3;
-    const gl = base + 0.12 + (rng() - 0.5) * 0.25;
-    oceanembed.push(+oe.toFixed(3));
-    glorys.push(+gl.toFixed(3));
-    argo.push(hasArgo ? +(base + (rng() - 0.5) * 0.5).toFixed(3) : null);
+// -------------------------------- normalizers
+//
+// Convention: every field is returned NORTH-UP — lats[0] is the northernmost row and
+// values[0] is that same row. The backend grid runs south-to-north, so rows are reversed
+// here. MapHeatmap draws row 0 at the top, and the ARGO/GLORYS accessors index with
+// north-up latitudes, so this keeps all three consistent.
+
+function normalizeField(raw, { date, depth, source }) {
+  if (!raw || typeof raw !== 'object') return null;
+
+  const values = Array.isArray(raw.values) ? raw.values : [];
+  if (values.length === 0) return null;
+
+  const bounds = raw.metadata && typeof raw.metadata === 'object' ? raw.metadata.bounds ?? {} : {};
+  const latMin = Number.isFinite(Number(bounds.latitude_min)) ? Number(bounds.latitude_min) : BBOX.latMin;
+  const latMax = Number.isFinite(Number(bounds.latitude_max)) ? Number(bounds.latitude_max) : BBOX.latMax;
+  const lonMin = Number.isFinite(Number(bounds.longitude_min)) ? Number(bounds.longitude_min) : BBOX.lonMin;
+  const lonMax = Number.isFinite(Number(bounds.longitude_max)) ? Number(bounds.longitude_max) : BBOX.lonMax;
+
+  const stepLat = 0.25;
+  const stepLon = 0.25;
+  const latCount = Math.round((latMax - latMin) / stepLat) + 1;
+  const lonCount = Math.round((lonMax - lonMin) / stepLon) + 1;
+
+  // Backend rows ascend from latMin; render row 0 as the north edge.
+  const lats = Array.from({ length: latCount }, (_, i) => Number((latMax - i * stepLat).toFixed(4)));
+  const lons = Array.from({ length: lonCount }, (_, j) => Number((lonMin + j * stepLon).toFixed(4)));
+
+  const southUp = values.map((row) => {
+    if (!Array.isArray(row)) {
+      return [numOrNull(row)];
+    }
+    return row.map((v) => numOrNull(v));
   });
-  return { depths: [...STANDARD_DEPTHS], oceanembed, glorys, argo: hasArgo ? argo : null, lat, lon, date };
+  const normalized = southUp.slice().reverse();
+
+  // Coverage: 1 where the value is finite, 0 where the model has nothing (land, shallower
+  // than the sea floor, or outside the reference mask). This is a data-availability mask,
+  // not a statistical confidence score.
+  const coverage = normalized.map((row) => row.map((v) => (v !== null ? 1 : 0)));
+
+  const finite = [];
+  normalized.forEach((row) => row.forEach((v) => { if (v !== null) finite.push(v); }));
+  const stats = finite.length > 0
+    ? { min: Math.min(...finite), max: Math.max(...finite), validCount: finite.length, totalCount: latCount * lonCount }
+    : { min: 0, max: 0, validCount: 0, totalCount: latCount * lonCount };
+
+  return { lats, lons, values: normalized, coverage, stats, date, depth, source };
 }
 
-function mockSkillMetrics() {
-  return STANDARD_DEPTHS.map((d, i) => {
-    const rng = mulberry32(hashStr(`skill|${d}`));
-    const rmse = +(0.28 + 0.0016 * d + 0.35 * Math.exp(-((d - 125) ** 2) / 12000) + rng() * 0.04).toFixed(3);
-    const mae = +(rmse * (0.72 + rng() * 0.06)).toFixed(3);
-    const bias = +(((rng() - 0.42) * 0.22).toFixed(3));
-    const correlation = +(Math.min(0.995, 0.985 - d / 9000 - i * 0.0012 - rng() * 0.004).toFixed(3));
-    return { depth: d, rmse, mae, bias, correlation };
-  });
+function normalizeProfile(raw, { date, lat, lon }) {
+  if (!raw || typeof raw !== 'object') return null;
+  const profileList = Array.isArray(raw.profile) ? raw.profile : [];
+  if (profileList.length === 0) return null;
+
+  const depths = profileList.map((p) => toNum(p.depth));
+  const oceanembed = profileList.map((p) => numOrNull(p.temperature));
+  if (!oceanembed.some((v) => v !== null)) return null;
+
+  return { depths, oceanembed, glorys: Array(depths.length).fill(null), argo: null, lat, lon, date };
 }
 
-function mockArgoFloats({ date }) {
-  const rng = mulberry32(hashStr(`argo|${date}`));
-  const n = 14 + Math.floor(rng() * 6);
-  const floats = [];
-  for (let k = 0; k < n; k++) {
-    const lat = +(BBOX.latMin + 1 + rng() * (BBOX.latMax - BBOX.latMin - 2)).toFixed(2);
-    const lon = +(BBOX.lonMin + 1 + rng() * (BBOX.lonMax - BBOX.lonMin - 2)).toFixed(2);
-    floats.push({ lat, lon, id: `ARGO-${date.slice(5).replace('-', '')}-${String(k + 1).padStart(2, '0')}` });
-  }
-  return floats;
+// ------------------------------ metadata / dates
+
+let metadataCache = null;
+
+export async function getMetadata() {
+  if (metadataCache) return metadataCache;
+  const raw = await fetchBackend('getMetadata', '/api/metadata');
+  if (!raw) return null;
+  metadataCache = {
+    datasetName: String(raw.dataset_name ?? 'OceanEmbed'),
+    availableDates: Array.isArray(raw.available_dates) ? raw.available_dates.map(String) : SUPPORTED_DATES,
+    availableDepths: Array.isArray(raw.available_depths) ? raw.available_depths.map(Number) : STANDARD_DEPTHS,
+    glorysStatus: String(raw.glorys_status ?? 'unknown'),
+    glorysProvenance: String(raw.glorys_provenance ?? ''),
+    argoStatus: String(raw.argo_status ?? 'unavailable'),
+    argoProvenance: String(raw.argo_provenance ?? ''),
+    argoAvailableDates: Array.isArray(raw.argo_available_dates) ? raw.argo_available_dates.map(String) : [],
+    modelParameterCount: numOrNull(raw.model_parameter_count),
+  };
+  return metadataCache;
 }
 
-function mockAnomalyAlerts() {
-  return [
-    { lat: 12.0, lon: 68.0, depth: 100, date: '2020-01-15', severity: 'watch', text: 'Marine heatwave watch — warm anomaly detected near 12°N, 68°E at 100m' },
-    { lat: 19.5, lon: 88.0, depth: 50, date: '2020-01-15', severity: 'advisory', text: 'Warm anomaly advisory — Bay of Bengal near 19.5°N, 88°E at 50m' },
-  ];
+/** Model dates from the backend, falling back to the known window. */
+export async function getSupportedDates() {
+  const meta = await getMetadata();
+  return meta?.availableDates?.length ? meta.availableDates : SUPPORTED_DATES;
 }
 
-function mockArgoValidationSummary() {
-  return { nProfiles: 18432, dateRange: 'Jan 2020 – Dec 2023', meanError: 0.42, rmse: 0.61, correlation: 0.967 };
+/** Latest model date, used for the header. */
+export async function getLastUpdate() {
+  const dates = await getSupportedDates();
+  return dates[dates.length - 1] ?? LAST_UPDATE;
 }
 
-function mockArgoScatter(n = 220) {
-  const rng = mulberry32(hashStr('scatter|argo'));
-  const pts = [];
-  for (let k = 0; k < n; k++) {
-    const depth = STANDARD_DEPTHS[Math.floor(rng() * STANDARD_DEPTHS.length)];
-    const obs = meanTemp(depth) + (rng() - 0.5) * 8;
-    const pred = obs + (rng() - 0.45) * 1.4;
-    pts.push({ obs: +obs.toFixed(2), pred: +pred.toFixed(2), depth });
-  }
-  return pts;
-}
-
-// ============================ public async API ============================
-// Canonical backend contracts only. Empty/unavailable states are explicit.
-
-async function fetchBackend(label, path, params = {}, timeoutMs = 12000) {
-  if (!isBackendEnabled()) return null;
-  try {
-    return await getJSON(path, params, timeoutMs);
-  } catch (e) {
-    console.warn(`[oceanembed] backend ${label} unavailable:`, e.message);
-    return null;
-  }
-}
+// ----------------------------------- fields
 
 export async function getTemperatureField({ date, depth, source = 'oceanembed' } = {}) {
   const raw = await fetchBackend('getTemperatureField', '/api/temperature', { date, depth });
   if (!raw) return null;
   return normalizeField(raw, { date, depth, source });
+}
+
+/** Fraction of grid cells with a finite value, straight from the backend. */
+export async function getCoverage({ date, depth } = {}) {
+  const raw = await fetchBackend('getCoverage', '/api/temperature/coverage', { date, depth });
+  if (!raw) return null;
+  return {
+    date: String(raw.date ?? date),
+    depth: toNum(raw.depth ?? depth),
+    validCells: toNum(raw.valid_cells),
+    totalCells: toNum(raw.total_cells),
+    coverage: numOrNull(raw.coverage),
+  };
 }
 
 export async function getVerticalProfile({ date, lat, lon } = {}) {
@@ -336,17 +217,12 @@ export async function getComparison({ latitude, longitude, date, depth } = {}) {
   const raw = await fetchBackend('getComparison', '/api/comparison', { latitude, longitude, date, depth });
   if (!raw || typeof raw !== 'object') return null;
 
-  const oceanembedTemperature = raw.oceanembed_temperature !== null && raw.oceanembed_temperature !== undefined
-    ? Number(raw.oceanembed_temperature)
-    : null;
-  const glorysTemperature = raw.glorys_temperature !== null && raw.glorys_temperature !== undefined
-    ? Number(raw.glorys_temperature)
-    : null;
-  const difference = raw.difference !== null && raw.difference !== undefined
-    ? Number(raw.difference)
-    : (Number.isFinite(oceanembedTemperature) && Number.isFinite(glorysTemperature)
-      ? oceanembedTemperature - glorysTemperature
-      : null);
+  const oceanembedTemperature = numOrNull(raw.oceanembed_temperature);
+  const glorysTemperature = numOrNull(raw.glorys_temperature);
+  let difference = numOrNull(raw.difference);
+  if (difference === null && oceanembedTemperature !== null && glorysTemperature !== null) {
+    difference = oceanembedTemperature - glorysTemperature;
+  }
 
   const hasUsefulPayload = [
     oceanembedTemperature,
@@ -363,38 +239,121 @@ export async function getComparison({ latitude, longitude, date, depth } = {}) {
     longitude: toNum(raw.longitude ?? longitude),
     date: String(raw.date ?? date),
     depth: toNum(raw.depth ?? depth),
-    oceanembed_temperature: Number.isFinite(oceanembedTemperature) ? oceanembedTemperature : null,
-    glorys_temperature: Number.isFinite(glorysTemperature) ? glorysTemperature : null,
-    difference: Number.isFinite(difference) ? difference : null,
+    oceanembed_temperature: oceanembedTemperature,
+    glorys_temperature: glorysTemperature,
+    difference,
     glorys_status: String(raw.glorys_status ?? 'unknown'),
     glorys_provenance: String(raw.glorys_provenance ?? 'Reference source unavailable'),
     unit: String(raw.unit ?? 'degC'),
   };
 }
 
+// ------------------------ ARGO validation (real observations)
+
+let validationCache = null;
+let validationInFlight = null;
+
+/**
+ * Fetch the ARGO validation payload once and reuse it.
+ *
+ * The validation endpoint runs the model over the whole window, so it is slow relative to
+ * the other calls. Caching it keeps the three consumers below to a single request.
+ */
+async function loadValidation() {
+  if (validationCache) return validationCache;
+  if (!validationInFlight) {
+    validationInFlight = fetchBackend('getValidation', '/api/validation', {}, 120000)
+      .then((raw) => {
+        validationCache = raw;
+        validationInFlight = null;
+        return raw;
+      })
+      .catch(() => { validationInFlight = null; return null; });
+  }
+  return validationInFlight;
+}
+
+/** Per-depth ARGO validation metrics. RMSE/MAE/bias are °C, correlation is unitless. */
 export async function getSkillMetrics() {
-  return [];
-}
-
-export async function getArgoFloats({ date } = {}) {
-  return [];
-}
-
-export async function getAnomalyAlerts() {
-  return [];
+  const raw = await loadValidation();
+  const perDepth = Array.isArray(raw?.per_depth) ? raw.per_depth : [];
+  return perDepth.map((m) => ({
+    depth: toNum(m.depth),
+    rmse: numOrNull(m.rmse),
+    mae: numOrNull(m.mae),
+    bias: numOrNull(m.bias),
+    correlation: numOrNull(m.correlation),
+    n: toNum(m.n),
+  }));
 }
 
 export async function getArgoValidationSummary() {
+  const raw = await loadValidation();
+  const summary = raw?.summary ?? {};
+  const metrics = raw?.metrics ?? {};
   return {
-    nProfiles: 0,
-    dateRange: 'Unavailable',
-    meanError: null,
-    rmse: null,
-    correlation: null,
+    status: String(summary.status ?? 'unavailable'),
+    provenance: String(summary.provenance ?? raw?.provenance ?? ''),
+    reference: String(summary.reference ?? 'ARGO'),
+    referenceKind: String(summary.reference_kind ?? raw?.reference_kind ?? ''),
+    nProfiles: numOrNull(summary.n_profiles),
+    nObservations: numOrNull(summary.n_observations ?? metrics.n_observations),
+    meanError: numOrNull(summary.mean_error ?? metrics.mae),
+    rmse: numOrNull(metrics.rmse),
+    correlation: numOrNull(summary.correlation ?? metrics.correlation),
+    dateRange: String(summary.date_range || 'Unavailable'),
+    modelVersion: String(summary.model_version ?? MODEL_VERSION),
+    caveat: String(summary.caveat ?? ''),
   };
 }
 
 export async function getArgoScatter(n = 220) {
-  return [];
+  const raw = await loadValidation();
+  const points = Array.isArray(raw?.scatter) ? raw.scatter : [];
+  return points.slice(0, n).map((p) => ({
+    obs: toNum(p.observed),
+    pred: toNum(p.predicted),
+    depth: toNum(p.depth),
+  }));
 }
 
+export async function getArgoFloats({ date } = {}) {
+  const raw = await fetchBackend('getArgoFloats', '/api/argo/floats', { date });
+  const floats = Array.isArray(raw?.floats) ? raw.floats : [];
+  return floats.map((f) => ({
+    id: String(f.id),
+    lat: toNum(f.lat),
+    lon: toNum(f.lon),
+    nLevels: toNum(f.n_levels),
+    depthMin: numOrNull(f.depth_min),
+    depthMax: numOrNull(f.depth_max),
+    kind: 'argo',
+  }));
+}
+
+/** ARGO time-matching details, so the UI can show the analysis date and its offset. */
+export async function getArgoTimeInfo({ date } = {}) {
+  const raw = await fetchBackend('getArgoFloats', '/api/argo/floats', { date });
+  if (!raw) return null;
+  return {
+    status: String(raw.status ?? 'unavailable'),
+    provenance: String(raw.provenance ?? ''),
+    argoDate: raw.argo_date ? String(raw.argo_date) : null,
+    timeOffsetDays: numOrNull(raw.time_offset_days),
+  };
+}
+
+export async function getAnomalyAlerts() {
+  const raw = await fetchBackend('getAnomalyAlerts', '/api/argo/alerts', {});
+  const alerts = Array.isArray(raw?.alerts) ? raw.alerts : [];
+  return alerts.map((a) => ({
+    lat: toNum(a.lat),
+    lon: toNum(a.lon),
+    depth: toNum(a.depth),
+    date: String(a.date ?? ''),
+    difference: numOrNull(a.difference),
+    direction: String(a.direction ?? ''),
+    text: String(a.message ?? 'Large model-versus-ARGO difference'),
+    severity: 'watch',
+  }));
+}

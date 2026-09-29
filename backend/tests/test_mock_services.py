@@ -281,10 +281,45 @@ def test_comparison_route_uses_dependency_injection():
         app.dependency_overrides.clear()
 
 
-def test_service_validation_contract():
-    response = get_validation(date(2024, 1, 1), 10.0)
+def test_service_validation_contract_without_reference():
+    """With no model/reference the service must report unavailability, never invent numbers."""
+    from app.data.interfaces import ArgoDataSource, DataSourceStatus
+
+    class MissingArgo(ArgoDataSource):
+        @property
+        def status(self):
+            return DataSourceStatus.UNAVAILABLE
+
+        @property
+        def provenance(self):
+            return "ARGO data is unavailable in this environment."
+
+        def is_available(self):
+            return False
+
+        def temperature_field(self, target_date):
+            return None
+
+        def matched_time(self, target_date):
+            return None
+
+        def available_times(self):
+            return []
+
+        def observed_cells(self, target_date):
+            return []
+
+        def get_profile_by_id(self, profile_id):
+            return None
+
+        def get_validation_observations(self, **kwargs):
+            return []
+
+    response = get_validation(date(2020, 1, 1), 10.0, argo=MissingArgo())
     assert response.dataset == "ARGO"
+    assert response.status == "unavailable"
     assert response.metrics.n_observations is None
+    assert response.metrics.rmse is None
 
 
 def test_api_endpoints_return_valid_contracts():

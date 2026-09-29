@@ -27,6 +27,16 @@ class MetadataResponse(BaseModel):
     supported_variables: list[str] = Field(default_factory=lambda: ["temperature"])
     glorys_status: str = "bundled_sample"
     glorys_provenance: str = "Bundled sample data is being used; this is not live GLORYS data."
+    argo_status: str = "unavailable"
+    argo_provenance: str = "ARGO validation data is unavailable in this environment."
+    argo_available_dates: list[str] = Field(default_factory=list)
+    model_available_dates: list[str] = Field(default_factory=list)
+    model_name: str = "PS66 OceanEmbed"
+    model_parameter_count: int | None = None
+    evaluation_note: str = (
+        "Metrics are reported on a common evaluation mask. Near-surface and deep layers are "
+        "reported separately from the thermocline."
+    )
 
 
 class TemperatureRequest(BaseModel):
@@ -120,6 +130,21 @@ class ComparisonResponse(BaseModel):
     unit: str = "degC"
 
 
+class CoverageResponse(BaseModel):
+    """Fraction of the model grid carrying a finite value for a date and depth."""
+
+    date: Date
+    depth: float
+    grid_shape: list[int] = Field(default_factory=lambda: [101, 241])
+    valid_cells: int
+    total_cells: int
+    coverage: float
+    note: str = (
+        "Coverage is the fraction of grid cells with a finite value. It is a data-availability "
+        "measure, not a model-confidence score."
+    )
+
+
 class ValidationRequest(BaseModel):
     """Query parameters for retrieving validation information for ARGO observations."""
 
@@ -144,17 +169,112 @@ class ValidationObservation(BaseModel):
 
 
 class ValidationMetrics(BaseModel):
-    """Summary validation metrics for a set of observations."""
+    """Summary validation metrics for a set of observations.
+
+    ``rmse``/``mae``/``bias`` cover every evaluated depth. The banded figures are
+    reported separately because an unweighted average over all depths is dominated
+    by the slowly varying deep layers and flatters a model that is weak in the
+    thermocline.
+    """
 
     rmse: float | None = None
     mae: float | None = None
     bias: float | None = None
+    correlation: float | None = None
     n_observations: int | None = None
+    rmse_ge50: float | None = None
+    rmse_thermocline: float | None = None
+    n_cells_per_day: int | None = None
+
+
+class DepthMetrics(BaseModel):
+    """Validation metrics for one standard depth level."""
+
+    depth: float
+    rmse: float | None = None
+    mae: float | None = None
+    bias: float | None = None
+    correlation: float | None = None
+    n: int = 0
+
+
+class ValidationSummary(BaseModel):
+    """Headline validation summary shown on the validation page."""
+
+    status: str = "unavailable"
+    provenance: str = ""
+    reference: str = "ARGO"
+    reference_kind: str = ""
+    date_range: str = ""
+    n_profiles: int | None = None
+    n_observations: int | None = None
+    mean_error: float | None = None
+    correlation: float | None = None
+    model_version: str = ""
+    caveat: str = ""
+
+
+class ScatterPoint(BaseModel):
+    """One model-vs-reference pair for the predicted/observed scatter plot."""
+
+    predicted: float
+    observed: float
+    depth: float
 
 
 class ValidationResponse(BaseModel):
     """Validation results for ARGO observations or other reference data."""
 
     dataset: str = "ARGO"
+    status: str = "unavailable"
+    provenance: str = ""
+    reference_kind: str = ""
     metrics: ValidationMetrics = Field(default_factory=ValidationMetrics)
+    per_depth: list[DepthMetrics] = Field(default_factory=list)
+    summary: ValidationSummary = Field(default_factory=ValidationSummary)
+    scatter: list[ScatterPoint] = Field(default_factory=list)
     observations: list[ValidationObservation] = Field(default_factory=list)
+
+
+class ArgoFloat(BaseModel):
+    """An ARGO-observed grid cell that has data on the requested date."""
+
+    id: str
+    lat: float
+    lon: float
+    n_levels: int
+    depth_min: float | None = None
+    depth_max: float | None = None
+    source: str = "ARGO"
+
+
+class ArgoFloatResponse(BaseModel):
+    """ARGO cell locations for a date, used to draw markers and a profile list."""
+
+    date: Date
+    status: str = "unavailable"
+    provenance: str = ""
+    argo_date: Date | None = None
+    time_offset_days: int | None = None
+    floats: list[ArgoFloat] = Field(default_factory=list)
+
+
+class AnomalyAlert(BaseModel):
+    """A location where model and reference disagree most strongly."""
+
+    id: str
+    lat: float
+    lon: float
+    date: Date
+    depth: float
+    difference: float
+    direction: str
+    message: str
+
+
+class AnomalyAlertResponse(BaseModel):
+    """Largest model-vs-reference disagreements, surfaced as review candidates."""
+
+    status: str = "unavailable"
+    provenance: str = ""
+    alerts: list[AnomalyAlert] = Field(default_factory=list)

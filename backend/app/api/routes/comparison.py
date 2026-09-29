@@ -2,9 +2,7 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.data.glorys import GlorysDataAccessor
 from app.data.interfaces import GlorysDataSource
-from app.model.adapter import OceanEmbedModelAdapter
 from app.model.interface import OceanEmbedModel
 from app.schemas.oceanembed import ComparisonResponse
 from app.services.comparison import get_comparison as get_comparison_service
@@ -12,15 +10,18 @@ from app.validation import validate_latitude, validate_longitude, validate_model
 
 router = APIRouter(prefix="/api/comparison", tags=["comparison"])
 
+from app.api.deps import get_glorys_source as _get_glorys_source
+from app.api.deps import get_model as _get_model
+
 
 def get_comparison_model() -> OceanEmbedModel:
-    """Return the configured model implementation for comparison requests."""
-    return OceanEmbedModelAdapter()
+    """Route-level dependency so tests can override the model without touching the cache."""
+    return _get_model()
 
 
 def get_comparison_glorys_source() -> GlorysDataSource:
-    """Return the configured GLORYS reference source for comparison requests."""
-    return GlorysDataAccessor()
+    """Route-level dependency so tests can override the reference source."""
+    return _get_glorys_source()
 
 
 @router.get("", response_model=ComparisonResponse, summary="Compare model output with GLORYS reference at a location")

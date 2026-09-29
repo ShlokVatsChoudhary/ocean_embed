@@ -64,8 +64,8 @@ export function AlertBanner({ alerts, onJump, onDismiss }) {
   return (
     <div className="alert-banner">
       <span className="alert-dot" />
-      <button className="alert-text" onClick={() => onJump(alerts[0])} title="Jump to anomaly location">
-        {alerts[0].text} — {alerts[0].date}. Click to inspect.
+      <button className="alert-text" onClick={() => onJump(alerts[0])} title="Jump to this location">
+        Largest model-vs-ARGO difference: {alerts[0].text} ({alerts[0].date}). Click to inspect.
       </button>
       <button className="btn small" onClick={onDismiss}>Dismiss</button>
     </div>

@@ -2,11 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { seqColor, divColor } from './color';
 import { BBOX } from '../api/oceanembed';
 
-// MapHeatmap: renders a 2D grid + optional confidence overlay + markers.
-// Props: field {lats,lons,values,confidence,stats}, mode 'sequential'|'diverging',
+// MapHeatmap: renders a 2D grid + optional coverage overlay + markers.
+//
+// Field rows are NORTH-UP (row 0 is the northernmost latitude) — see the note in
+// api/oceanembed.js. The y-axis therefore maps the top of the plot to BBOX.latMax.
+//
+// Props: field {lats,lons,values,coverage,stats}, mode 'sequential'|'diverging',
 // fixedRange {min,max} | null (shared scale), markers [{lat,lon,kind}],
-// selected {lat,lon}|null, showConfidence bool, onSelect({lat,lon})|null, height.
-export default function MapHeatmap({ field, mode = 'sequential', fixedRange = null, markers = [], selected = null, showConfidence = false, onSelect = null, height = 380 }) {
+// selected {lat,lon}|null, showCoverage bool, onSelect({lat,lon})|null, height.
+export default function MapHeatmap({ field, mode = 'sequential', fixedRange = null, markers = [], selected = null, showCoverage = false, onSelect = null, height = 380 }) {
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
   const [hover, setHover] = useState(null);
@@ -26,7 +30,7 @@ export default function MapHeatmap({ field, mode = 'sequential', fixedRange = nu
     ctx.fillStyle = '#f4f6f8';
     ctx.fillRect(0, 0, W, H);
 
-    const { lats, lons, values, confidence } = field;
+    const { lats, lons, values, coverage } = field;
     const nLat = lats.length, nLon = lons.length;
     const plotW = W - padL - padR, plotH = H - padT - padB;
     let vmin, vmax;
@@ -50,7 +54,9 @@ export default function MapHeatmap({ field, mode = 'sequential', fixedRange = nu
         const t = (numericValue - vmin) / span;
         ctx.fillStyle = mode === 'diverging' ? divColor(t) : seqColor(t);
         ctx.fillRect(padL + j * cw, padT + i * ch, cw + 0.5, ch + 0.5);
-        if (showConfidence && confidence && confidence[i][j] < 0.6) {
+        // Dim cells the model did not actually produce. `coverage` is 0/1 (finite value or
+        // not), so this marks missing data rather than low statistical confidence.
+        if (showCoverage && coverage && coverage[i][j] < 0.5) {
           ctx.fillStyle = 'rgba(20,25,35,0.42)';
           ctx.fillRect(padL + j * cw, padT + i * ch, cw + 0.5, ch + 0.5);
           ctx.strokeStyle = 'rgba(255,255,255,0.35)';
@@ -98,7 +104,7 @@ export default function MapHeatmap({ field, mode = 'sequential', fixedRange = nu
     }
     canvas._proj = { padL, padT, plotW, plotH, W };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [field, mode, showConfidence, JSON.stringify(markers), JSON.stringify(selected), height, fixedRange ? fixedRange.min + ':' + fixedRange.max : 'auto']);
+  }, [field, mode, showCoverage, JSON.stringify(markers), JSON.stringify(selected), height, fixedRange ? fixedRange.min + ':' + fixedRange.max : 'auto']);
 
   const handlePointerMove = (e) => {
     if (!field || !field.values || !field.lats || !field.lons || !canvasRef.current) {
@@ -124,6 +130,8 @@ export default function MapHeatmap({ field, mode = 'sequential', fixedRange = nu
       setHover(null);
       return;
     }
+    // latIndex counts down from the north edge, matching the north-up rows.
+
     const lat = field.lats[latIndex];
     const lon = field.lons[lonIndex];
     setHover({
@@ -183,7 +191,7 @@ export default function MapHeatmap({ field, mode = 'sequential', fixedRange = nu
       )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
         <span style={{ fontSize: 11, color: '#445', minWidth: 44, textAlign: 'right' }}>
-          {mode === 'diverging' ? `−${(fixedRange ? Math.max(Math.abs(fixedRange.min), Math.abs(fixedRange.max)) : 2.5).toFixed(1)}` : (fixedRange ? fixedRange.min.toFixed(1) : field?.stats.min.toFixed(1))}°C
+          {mode === 'diverging' ? `−${(fixedRange ? Math.max(Math.abs(fixedRange.min), Math.abs(fixedRange.max)) : 2.5).toFixed(1)}` : (fixedRange ? fixedRange.min.toFixed(1) : (field?.stats?.min ?? 0).toFixed(1))}°C
         </span>
         <div style={{ display: 'flex', flex: 1, height: 12, borderRadius: 3, overflow: 'hidden', border: '1px solid #cbd2da' }}>
           {barVals.map((t, i) => (
@@ -191,7 +199,7 @@ export default function MapHeatmap({ field, mode = 'sequential', fixedRange = nu
           ))}
         </div>
         <span style={{ fontSize: 11, color: '#445', minWidth: 44 }}>
-          +{(mode === 'diverging' ? (fixedRange ? Math.max(Math.abs(fixedRange.min), Math.abs(fixedRange.max)) : 2.5) : (fixedRange ? fixedRange.max : field?.stats.max)).toFixed(1)}°C
+          +{(mode === 'diverging' ? (fixedRange ? Math.max(Math.abs(fixedRange.min), Math.abs(fixedRange.max)) : 2.5) : (fixedRange ? fixedRange.max : (field?.stats?.max ?? 0))).toFixed(1)}°C
         </span>
         <span style={{ fontSize: 11, color: '#445' }}>°C scale</span>
       </div>

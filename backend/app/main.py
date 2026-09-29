@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.routes.argo import router as argo_router
 from app.api.routes.comparison import router as comparison_router
 from app.api.routes.metadata import router as metadata_router
 from app.api.routes.profile import router as profile_router
@@ -26,6 +27,7 @@ app.include_router(temperature_router)
 app.include_router(profile_router)
 app.include_router(comparison_router)
 app.include_router(validation_router)
+app.include_router(argo_router)
 
 
 @app.get("/")

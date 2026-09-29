@@ -4,7 +4,7 @@ import ExploreView from './views/ExploreView';
 import AnalyzeView from './views/AnalyzeView';
 import ValidateView from './views/ValidateView';
 import { AlertBanner } from './components/controls';
-import { getAnomalyAlerts, MODEL_VERSION, LAST_UPDATE, prettyDate } from './api/oceanembed';
+import { getAnomalyAlerts, getMetadata, MODEL_VERSION, prettyDate, getSupportedDates } from './api/oceanembed';
 
 export default function App() {
   const [showHero, setShowHero] = useState(true);
@@ -14,11 +14,21 @@ export default function App() {
   const [selected, setSelected] = useState({ lat: 12.0, lon: 68.0 });
   const [bannerOff, setBannerOff] = useState(false);
   const [alerts, setAlerts] = useState([]);
+  const [meta, setMeta] = useState(null);
+  const [dates, setDates] = useState([]);
 
   useEffect(() => {
     let dead = false;
     getAnomalyAlerts().then((a) => { if (!dead) setAlerts(a); }).catch(() => {});
+    getMetadata().then((m) => { if (!dead) setMeta(m); }).catch(() => {});
+    getSupportedDates().then((d) => {
+      if (dead) return;
+      setDates(d);
+      // Open on a date the backend actually has rather than a hard-coded one.
+      if (d.length && !d.includes(date)) setDate(d[0]);
+    }).catch(() => {});
     return () => { dead = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const jumpToAlert = (a) => {
@@ -56,12 +66,13 @@ export default function App() {
         {view === 'validate' && <ValidateView date={date} setDate={setDate} depth={depth} setDepth={setDepth} selected={selected} setSelected={setSelected} />}
       </main>
       <footer className="statusbar">
-        <span>Last data update: {prettyDate(LAST_UPDATE)}</span>
-        <span>Model: {MODEL_VERSION}</span>
+        <span>Model dates: {dates.length ? `${prettyDate(dates[0])} – ${prettyDate(dates[dates.length - 1])}` : 'unavailable'}</span>
+        <span>Model: {MODEL_VERSION}{meta?.modelParameterCount ? ` · ${meta.modelParameterCount.toLocaleString()} params` : ''}</span>
         <span>Domain: 5°N–30°N · 45°E–105°E</span>
         <span>Resolution: 0.25°</span>
         <span>Depth: 0–1000 m</span>
-        <span>Data period: Jan 1–7, 2020</span>
+        <span title={meta?.glorysProvenance || ''}>Reference (GLORYS): {meta?.glorysStatus ?? 'unknown'}</span>
+        <span title={meta?.argoProvenance || ''}>Validation (ARGO): {meta?.argoStatus ?? 'unknown'}</span>
       </footer>
     </div>
   );
