@@ -112,3 +112,11 @@ data/argo/               bundled ARGO NetCDF
 value. `_bilinear` has the same class of bug. It is **not** fixed here because that would change
 the training arrays and invalidate the trained weights. The backend ARGO path uses its own
 interpolation and is unaffected. Fix it during the next retraining run.
+
+## Ocean hazard endpoints
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/hazard/variables` | Available diagnostics |
+| GET | `/api/hazard/summary?date=` | All diagnostics + cyclone-relevant counts |
+| GET | `/api/hazard?date=&variable=` | One diagnostic as a grid |
