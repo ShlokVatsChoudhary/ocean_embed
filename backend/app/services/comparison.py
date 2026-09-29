@@ -43,6 +43,27 @@ def _extract_point_temperature_from_model(model: OceanEmbedModel, latitude: floa
     )
 
 
+def _resolve_grid_point(
+    model: OceanEmbedModel,
+    *,
+    latitude: float,
+    longitude: float,
+    selected_date: date,
+) -> dict[str, object]:
+    """Ask the model which grid cell a requested coordinate resolves to.
+
+    Grid transparency is nice-to-have, so an implementation that cannot report it degrades to
+    empty rather than failing the whole comparison.
+    """
+    resolver = getattr(model, "resolve_grid_point", None)
+    if resolver is None:
+        return {}
+    try:
+        return dict(resolver(latitude=latitude, longitude=longitude, date=selected_date))
+    except (NotImplementedError, TypeError, ValueError, KeyError):
+        return {}
+
+
 def _status_value(source: object) -> str:
     status = getattr(source, "status", None)
     if status is None:
@@ -96,6 +117,43 @@ def get_comparison(
     else:
         difference = oceanembed_temperature - glorys_temperature
 
+    grid = _resolve_grid_point(
+        model,
+        latitude=latitude,
+        longitude=longitude,
+        selected_date=selected_date,
+    )
+
+    if oceanembed_temperature is None:
+        state = "model_unavailable"
+        state_message = (
+            "OceanEmbed prediction unavailable at this location, depth and date. "
+            "No fallback value is substituted."
+        )
+    elif glorys_temperature is None:
+        state = "model_only"
+        state_message = (
+            "GLORYS reference unavailable at this location, depth and date. "
+            "This is a missing reference, not an error."
+        )
+    else:
+        state = "model_and_reference"
+        state_message = (
+            "OceanEmbed and the GLORYS reference are both available; difference is "
+            "OceanEmbed minus GLORYS."
+        )
+
+    # A non-zero offset means the requested cell had no complete column and the value came from
+    # a neighbouring full-column cell. Say so rather than implying the value is local.
+    offset = grid.get("offset_degrees")
+    if oceanembed_temperature is not None and isinstance(offset, (int, float)) and offset > 0:
+        state_message = (
+            f"{state_message} The value is read from the nearest full-depth model cell at "
+            f"{grid.get('grid_latitude')}N, {grid.get('grid_longitude')}E, "
+            f"{offset} degrees from the requested cell, because the requested cell has no "
+            f"complete 0-1000 m column."
+        )
+
     return ComparisonResponse(
         latitude=latitude,
         longitude=longitude,
@@ -107,4 +165,13 @@ def get_comparison(
         glorys_status=_status_value(glorys_source),
         glorys_provenance=_provenance_value(glorys_source),
         unit="degC",
+        requested_latitude=latitude,
+        requested_longitude=longitude,
+        grid_latitude=grid.get("grid_latitude"),
+        grid_longitude=grid.get("grid_longitude"),
+        nearest_grid_latitude=grid.get("nearest_grid_latitude"),
+        nearest_grid_longitude=grid.get("nearest_grid_longitude"),
+        offset_degrees=grid.get("offset_degrees"),
+        state=state,
+        state_message=state_message,
     )

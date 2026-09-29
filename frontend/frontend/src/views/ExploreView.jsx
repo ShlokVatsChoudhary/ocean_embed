@@ -187,17 +187,54 @@ export default function ExploreView({ date, setDate, depth, setDepth, selected, 
             </div>
             {!hasSelection && <div className="notice">Click the map to select a location.</div>}
             {hasSelection && comparisonLoading && <div className="notice">Loading comparison…</div>}
-            {hasSelection && comparisonError && !comparisonLoading && <div className="notice">Reference comparison unavailable for this location.</div>}
-            {hasSelection && !comparisonError && !comparisonLoading && !comparison && <div className="notice">Reference comparison unavailable for this location.</div>}
-            {hasSelection && comparison && (
+            {hasSelection && comparisonError && !comparisonLoading && <div className="notice">The comparison service could not be reached. No values are shown rather than substitutes.</div>}
+            {hasSelection && !comparisonError && !comparisonLoading && !comparison && <div className="notice">No comparison payload for this location, depth and date.</div>}
+            {hasSelection && comparison && comparison.state === 'model_unavailable' && (
+              <div className="notice">
+                <strong>OceanEmbed prediction unavailable</strong> at this location, depth and date.
+                No fallback scientific value is shown.
+              </div>
+            )}
+            {hasSelection && comparison && comparison.state === 'model_only' && (
+              <div className="notice">
+                <strong>GLORYS reference unavailable</strong> at this location, depth and date. This is a
+                legitimate missing reference, not an error.
+              </div>
+            )}
+            {hasSelection && comparison && comparison.offset_degrees > 1 && (
+              <div className="notice" style={{ borderLeft: '3px solid #b45309' }}>
+                <strong>Not a local value.</strong> This is a shelf-sea location, so the nearest cell
+                with a complete 0–1000 m column is {comparison.offset_degrees.toFixed(2)}° away
+                ({comparison.grid_latitude.toFixed(2)}°N, {comparison.grid_longitude.toFixed(2)}°E).
+                Read this number as representative of that cell, not of your clicked point.
+              </div>
+            )}
+            {hasSelection && comparison && comparison.state !== 'model_unavailable' && (
               <div className="comparison-grid">
                 <div className="comparison-stat">
-                  <span>Latitude</span>
-                  <strong>{comparison.latitude.toFixed(2)}°N</strong>
+                  <span>Requested location</span>
+                  <strong>{comparison.requested_latitude.toFixed(2)}°N, {comparison.requested_longitude.toFixed(2)}°E</strong>
                 </div>
                 <div className="comparison-stat">
-                  <span>Longitude</span>
-                  <strong>{comparison.longitude.toFixed(2)}°E</strong>
+                  <span>Value read from grid cell</span>
+                  <strong>
+                    {comparison.grid_latitude == null
+                      ? 'Not reported'
+                      : `${comparison.grid_latitude.toFixed(2)}°N, ${comparison.grid_longitude.toFixed(2)}°E`}
+                  </strong>
+                  <div className="muted small" style={{ marginTop: 4 }}>
+                    {comparison.grid_latitude == null
+                      ? 'The model did not report a grid point for this request.'
+                      : comparison.offset_degrees > 0
+                        ? `Nearest cell to the request (${comparison.nearest_grid_latitude.toFixed(2)}°N, ${comparison.nearest_grid_longitude.toFixed(2)}°E) has no complete 0–1000 m column, so the value comes from ${comparison.offset_degrees.toFixed(2)}° away.`
+                        : comparison.snappedToGrid
+                          ? `Nearest ${comparison.grid_resolution_degrees}° cell.`
+                          : `On the ${comparison.grid_resolution_degrees}° grid.`}
+                  </div>
+                </div>
+                <div className="comparison-stat">
+                  <span>Date</span>
+                  <strong>{prettyDate(comparison.date)}</strong>
                 </div>
                 <div className="comparison-stat">
                   <span>Depth</span>

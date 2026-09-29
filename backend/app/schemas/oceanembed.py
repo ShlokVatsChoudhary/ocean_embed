@@ -129,6 +129,29 @@ class ComparisonResponse(BaseModel):
     glorys_provenance: str = "Bundled sample data is being used; this is not live GLORYS data."
     unit: str = "degC"
 
+    # Grid transparency. A requested coordinate is snapped to the nearest grid cell, so the
+    # response reports both what was asked for and what was actually read.
+    requested_latitude: float | None = None
+    requested_longitude: float | None = None
+    #: The cell the value came from. Over a shelf sea the nearest cell may lack a full-depth
+    #: column, so this can differ from ``nearest_grid_*``.
+    grid_latitude: float | None = None
+    grid_longitude: float | None = None
+    #: The grid cell closest to the request, regardless of data availability.
+    nearest_grid_latitude: float | None = None
+    nearest_grid_longitude: float | None = None
+    #: Distance in degrees between the two, i.e. how far the value had to travel. Non-zero means
+    #: the requested cell had no complete profile.
+    offset_degrees: float | None = None
+    grid_resolution_degrees: float = 0.25
+
+    # State A: model and reference both available.
+    # State B: model available, reference unavailable. A legitimate missing reference,
+    #          explicitly not an error.
+    # State C: model unavailable. No fallback scientific numbers are produced.
+    state: str = "model_unavailable"
+    state_message: str = "OceanEmbed prediction unavailable at this location, depth and date."
+
 
 class CoverageResponse(BaseModel):
     """Fraction of the model grid carrying a finite value for a date and depth."""

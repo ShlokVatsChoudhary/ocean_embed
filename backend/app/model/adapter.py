@@ -258,21 +258,37 @@ class OceanEmbedModelAdapter(OceanEmbedModel):
         """
         return self._predict_field_for_date(target_date)
 
-    def _nearest_valid_grid_point(self, field: np.ndarray, latitude: float, longitude: float) -> tuple[int, int]:
-        lat_index = _nearest_grid_index(
-            latitude,
-            MODEL_LATITUDE_MIN,
-            MODEL_LATITUDE_MAX,
-            MODEL_LATITUDE_RESOLUTION,
-            field.shape[1],
+    def _direct_grid_point(self, field: np.ndarray, latitude: float, longitude: float) -> tuple[int, int]:
+        """The nearest grid cell to a request, without any search for valid data."""
+        return (
+            _nearest_grid_index(
+                latitude,
+                MODEL_LATITUDE_MIN,
+                MODEL_LATITUDE_MAX,
+                MODEL_LATITUDE_RESOLUTION,
+                field.shape[1],
+            ),
+            _nearest_grid_index(
+                longitude,
+                MODEL_LONGITUDE_MIN,
+                MODEL_LONGITUDE_MAX,
+                MODEL_LONGITUDE_RESOLUTION,
+                field.shape[2],
+            ),
         )
-        lon_index = _nearest_grid_index(
-            longitude,
-            MODEL_LONGITUDE_MIN,
-            MODEL_LONGITUDE_MAX,
-            MODEL_LONGITUDE_RESOLUTION,
-            field.shape[2],
-        )
+
+    def _nearest_valid_grid_point(
+        self, field: np.ndarray, latitude: float, longitude: float
+    ) -> tuple[int, int]:
+        """Find the nearest cell that carries a value at *every* standard depth.
+
+        A vertical profile is only meaningful if the whole column is present, so a request over a
+        shelf sea (where the water is shallower than 1000 m) is answered from the nearest
+        full-column cell. That cell can be far away, so callers that care about transparency
+        should use ``resolve_grid_point`` and report the offset rather than implying the value
+        came from the requested location.
+        """
+        lat_index, lon_index = self._direct_grid_point(field, latitude, longitude)
 
         max_radius = max(field.shape[1], field.shape[2])
         for radius in range(max_radius + 1):
@@ -327,6 +343,57 @@ class OceanEmbedModelAdapter(OceanEmbedModel):
         if not np.isfinite(value):
             return None
         return value
+
+    def resolve_grid_point(
+        self,
+        *,
+        latitude: float,
+        longitude: float,
+        date: date,
+    ) -> dict[str, object]:
+        """Snap a requested coordinate onto the model grid.
+
+        The grid is ``lat = 5 + i * 0.25`` and ``lon = 45 + j * 0.25``, so a request such as
+        15.10N/65.13E resolves to 15.00N/65.00E. Exposing the resolved point lets the UI say
+        which cell a click actually landed on instead of implying exact-point skill.
+
+        Reports two things, because they are not always the same cell:
+
+        * ``nearest_*`` — the grid cell closest to the requested coordinate.
+        * ``grid_*``    — the cell the value actually came from. Over a shelf sea the nearest
+          cell may not have a full-depth column, so the value is taken from the closest cell
+          that does, and ``offset_degrees`` records how far that is. Reporting only the
+          requested location would overstate where the number came from.
+        """
+        field = self._predict_field_for_date(date)
+        nearest_lat_index, nearest_lon_index = self._direct_grid_point(field, latitude, longitude)
+        lat_index, lon_index = self._nearest_valid_grid_point(field, latitude, longitude)
+
+        def lat_of(index: int) -> float:
+            return MODEL_LATITUDE_MIN + index * MODEL_LATITUDE_RESOLUTION
+
+        def lon_of(index: int) -> float:
+            return MODEL_LONGITUDE_MIN + index * MODEL_LONGITUDE_RESOLUTION
+
+        grid_latitude = lat_of(lat_index)
+        grid_longitude = lon_of(lon_index)
+        nearest_latitude = lat_of(nearest_lat_index)
+        nearest_longitude = lon_of(nearest_lon_index)
+
+        return {
+            "grid_latitude": round(grid_latitude, 4),
+            "grid_longitude": round(grid_longitude, 4),
+            "lat_index": int(lat_index),
+            "lon_index": int(lon_index),
+            "nearest_grid_latitude": round(nearest_latitude, 4),
+            "nearest_grid_longitude": round(nearest_longitude, 4),
+            "nearest_lat_index": int(nearest_lat_index),
+            "nearest_lon_index": int(nearest_lon_index),
+            "offset_degrees": round(
+                max(abs(grid_latitude - nearest_latitude), abs(grid_longitude - nearest_longitude)), 4
+            ),
+            "has_value": bool(np.isfinite(field[:, lat_index, lon_index]).any()),
+        }
 
 
 if __name__ == "__main__":

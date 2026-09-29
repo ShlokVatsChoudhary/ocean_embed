@@ -234,9 +234,37 @@ export async function getComparison({ latitude, longitude, date, depth } = {}) {
 
   if (!hasUsefulPayload) return null;
 
+  // State A/B/C per the interface contract. `state` drives the presentation so a missing
+  // reference (model_only) is never shown as a failure, and a missing model (model_unavailable)
+  // never gets a fabricated number.
+  let state = String(raw.state ?? '');
+  if (!['model_and_reference', 'model_only', 'model_unavailable'].includes(state)) {
+    state = oceanembedTemperature === null
+      ? 'model_unavailable'
+      : glorysTemperature === null ? 'model_only' : 'model_and_reference';
+  }
+
+  const gridLat = numOrNull(raw.grid_latitude);
+  const gridLon = numOrNull(raw.grid_longitude);
+  const reqLat = toNum(raw.requested_latitude ?? raw.latitude ?? latitude);
+  const reqLon = toNum(raw.requested_longitude ?? raw.longitude ?? longitude);
+  const snapped = gridLat !== null && gridLon !== null
+    && (Math.abs(gridLat - reqLat) > 1e-6 || Math.abs(gridLon - reqLon) > 1e-6);
+
   return {
     latitude: toNum(raw.latitude ?? latitude),
     longitude: toNum(raw.longitude ?? longitude),
+    requested_latitude: reqLat,
+    requested_longitude: reqLon,
+    grid_latitude: gridLat,
+    grid_longitude: gridLon,
+    nearest_grid_latitude: numOrNull(raw.nearest_grid_latitude),
+    nearest_grid_longitude: numOrNull(raw.nearest_grid_longitude),
+    // Distance in degrees between the requested cell and the cell the value came from. A
+    // non-zero offset means the requested cell has no complete 0-1000 m column.
+    offset_degrees: numOrNull(raw.offset_degrees) ?? 0,
+    snappedToGrid: snapped,
+    grid_resolution_degrees: numOrNull(raw.grid_resolution_degrees) ?? 0.25,
     date: String(raw.date ?? date),
     depth: toNum(raw.depth ?? depth),
     oceanembed_temperature: oceanembedTemperature,
@@ -245,6 +273,8 @@ export async function getComparison({ latitude, longitude, date, depth } = {}) {
     glorys_status: String(raw.glorys_status ?? 'unknown'),
     glorys_provenance: String(raw.glorys_provenance ?? 'Reference source unavailable'),
     unit: String(raw.unit ?? 'degC'),
+    state,
+    state_message: String(raw.state_message ?? ''),
   };
 }
 

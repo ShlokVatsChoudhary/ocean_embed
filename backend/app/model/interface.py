@@ -115,6 +115,20 @@ class OceanEmbedModel(ABC):
             return prediction.values[row_index][col_index]
         return None
 
+    def resolve_grid_point(
+        self,
+        *,
+        latitude: float,
+        longitude: float,
+        date: Date,
+    ) -> dict[str, object]:
+        """Snap a requested coordinate onto the nearest model grid point.
+
+        Implementations that cannot do this should raise NotImplementedError; callers treat
+        that as "grid location not reported" rather than failing the request.
+        """
+        raise NotImplementedError
+
     @staticmethod
     def _nearest_grid_index(value: float, min_value: float, max_value: float, resolution: float, length: int) -> int:
         if value <= min_value:
