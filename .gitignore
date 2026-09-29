@@ -36,3 +36,6 @@ data/processed/
 # backend/scripts/fetch_argo.py.
 !backend/data/argo/
 !backend/data/argo/*.nc
+
+# Local run artifacts (see run.sh)
+.run-logs/
