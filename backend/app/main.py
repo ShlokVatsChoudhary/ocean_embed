@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.core.config import get_settings
+
 from app.api.routes.argo import router as argo_router
 from app.api.routes.comparison import router as comparison_router
 from app.api.routes.metadata import router as metadata_router
@@ -14,9 +16,11 @@ app = FastAPI(
     version="0.1.0",
 )
 
+# Allowed origins are configurable so the same code serves the Vite dev server and the built
+# preview build. See app.core.config.Settings.cors_origins.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=get_settings().cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

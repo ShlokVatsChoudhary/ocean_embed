@@ -43,6 +43,18 @@ class Settings(BaseSettings):
     #: Optional root holding a live GLORYS archive.
     glorys_root: Path | None = None
 
+    #: Browser origins allowed to call the API. Vite serves the dev UI on 5173 and the built
+    #: preview on 4173; both loopback spellings are included so the demo works regardless of
+    #: which one is used. Override with OCEANEMBED_CORS_ORIGINS as a JSON list.
+    cors_origins: list[str] = Field(
+        default_factory=lambda: [
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://localhost:4173",
+            "http://127.0.0.1:4173",
+        ]
+    )
+
     @property
     def backend_dir(self) -> Path:
         return repo_root() / "backend"

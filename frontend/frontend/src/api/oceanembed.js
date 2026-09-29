@@ -17,7 +17,13 @@ export const MODEL_VERSION = 'oceanembed-v0.3-real';
 export const SUPPORTED_DATES = ['2020-01-01', '2020-01-02', '2020-01-03', '2020-01-04', '2020-01-05', '2020-01-06', '2020-01-07'];
 export const LAST_UPDATE = SUPPORTED_DATES[SUPPORTED_DATES.length - 1];
 
-const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '');
+// VITE_API_BASE points at the backend during development. If it is not set at build time we
+// fall back to the page's own origin, which is what a deployed build behind a reverse proxy
+// wants. Either way the UI only ever shows real payloads: an unreachable backend surfaces as
+// "unavailable", never as substituted data.
+const CONFIGURED_API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '');
+const API_BASE = CONFIGURED_API_BASE
+  || (typeof window !== 'undefined' && window.location ? window.location.origin : '');
 export const isBackendEnabled = () => API_BASE.length > 0;
 export const getApiBase = () => API_BASE;
 
