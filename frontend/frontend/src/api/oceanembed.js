@@ -158,6 +158,79 @@ function normalizeProfile(raw, { date, lat, lon }) {
   return { depths, oceanembed, glorys: Array(depths.length).fill(null), argo: null, lat, lon, date };
 }
 
+// ----------------------------------- ocean hazards
+// Cyclone-relevant diagnostics derived from the temperature field. These are the
+// disaster-management products; the temperature field is their input.
+//
+// Honesty rules: every payload carries its provenance and caveat from the backend, and a
+// cell the backend could not compute is null. We never substitute a number for a null, and
+// in particular a shallow column is NOT shown as a low TCHP -- that would read as low
+// cyclone risk when the truth is simply unknown.
+
+export const HAZARD_VARIABLES = [
+  { id: 'tchp', label: 'Cyclone heat potential (TCHP)', unit: 'kJ/cm²', category: true },
+  { id: 'd26', label: 'Depth of the 26 °C isotherm', unit: 'm', category: false },
+  { id: 'ohc', label: 'Ocean heat content (0–300 m)', unit: 'kJ/cm²', category: false },
+  { id: 'mld', label: 'Mixed-layer depth', unit: 'm', category: false },
+  { id: 'thermocline_depth', label: 'Thermocline depth', unit: 'm', category: false },
+];
+
+export function hazardVariableInfo(id) {
+  return HAZARD_VARIABLES.find((v) => v.id === id) ?? HAZARD_VARIABLES[0];
+}
+
+export async function getHazardField({ date, variable = 'tchp' } = {}) {
+  const raw = await fetchBackend('getHazardField', '/api/hazard', { date, variable });
+  if (!raw) return null;
+  const field = normalizeField(raw, { date, depth: null, source: 'hazard' });
+  if (!field) return null;
+  return {
+    ...field,
+    variable: String(raw.variable ?? variable),
+    label: String(raw.label ?? hazardVariableInfo(variable).label),
+    unit: String(raw.unit ?? hazardVariableInfo(variable).unit),
+    categoryBreaks: Array.isArray(raw.category_breaks) ? raw.category_breaks.map(Number) : [],
+    categoryLabels: Array.isArray(raw.category_labels) ? raw.category_labels.map(String) : [],
+    minValidDepthM: numOrNull(raw.min_valid_depth_m),
+    provenance: String(raw.provenance ?? ''),
+    caveat: String(raw.caveat ?? ''),
+  };
+}
+
+let hazardSummaryCache = new Map();
+
+export async function getHazardSummary({ date } = {}) {
+  if (hazardSummaryCache.has(date)) return hazardSummaryCache.get(date);
+  const raw = await fetchBackend('getHazardSummary', '/api/hazard/summary', { date });
+  if (!raw) return null;
+  const summary = {
+    date: String(raw.date ?? date),
+    status: String(raw.status ?? 'unavailable'),
+    metrics: Array.isArray(raw.metrics)
+      ? raw.metrics.map((m) => ({
+        variable: String(m.variable ?? ''),
+        label: String(m.label ?? ''),
+        unit: String(m.unit ?? ''),
+        minimum: numOrNull(m.minimum),
+        median: numOrNull(m.median),
+        maximum: numOrNull(m.maximum),
+        validCells: toNum(m.valid_cells),
+        totalCells: toNum(m.total_cells),
+      }))
+      : [],
+    validCells: toNum(raw.valid_cells),
+    totalCells: toNum(raw.total_cells),
+    coverage: numOrNull(raw.coverage),
+    favourableCells: toNum(raw.favourable_cells),
+    rapidIntensificationCells: toNum(raw.rapid_intensification_cells),
+    minValidDepthM: numOrNull(raw.min_valid_depth_m),
+    provenance: String(raw.provenance ?? ''),
+    caveat: String(raw.caveat ?? ''),
+  };
+  hazardSummaryCache.set(date, summary);
+  return summary;
+}
+
 // ------------------------------ metadata / dates
 
 let metadataCache = null;

@@ -40,6 +40,7 @@ export function CompareModeSwitch({ mode, onChange }) {
     ['model', 'OceanEmbed'],
     ['glorys', 'vs GLORYS'],
     ['diff', 'Difference'],
+    ['hazard', 'Cyclone risk'],
   ];
   return (
     <div className="seg" role="tablist" aria-label="Compare mode">

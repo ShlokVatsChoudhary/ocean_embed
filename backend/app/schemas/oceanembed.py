@@ -301,3 +301,54 @@ class AnomalyAlertResponse(BaseModel):
     status: str = "unavailable"
     provenance: str = ""
     alerts: list[AnomalyAlert] = Field(default_factory=list)
+
+
+# --------------------------------------------------------------- ocean hazards
+# Derived cyclone-relevant diagnostics. These are the quantities a warning centre
+# uses; the raw temperature field is the input to them, not the product.
+
+class HazardFieldResponse(BaseModel):
+    """A single hazard diagnostic as a gridded field."""
+
+    date: Date
+    variable: str
+    label: str
+    unit: str
+    values: list[list[float | None]]
+    grid_shape: list[int] = Field(default_factory=lambda: [101, 241])
+    bounds: dict[str, float] = Field(default_factory=dict)
+    stats: dict[str, float | int | None] = Field(default_factory=dict)
+    category_breaks: list[float] = Field(default_factory=list)
+    category_labels: list[str] = Field(default_factory=list)
+    min_valid_depth_m: float = 300.0
+    provenance: str = ""
+    caveat: str = ""
+
+
+class HazardSummaryItem(BaseModel):
+    """Summary statistics for one hazard diagnostic."""
+
+    variable: str
+    label: str
+    unit: str
+    minimum: float | None = None
+    median: float | None = None
+    maximum: float | None = None
+    valid_cells: int = 0
+    total_cells: int = 0
+
+
+class HazardSummaryResponse(BaseModel):
+    """Every hazard diagnostic for one day, plus the cyclone-relevant counts."""
+
+    date: Date
+    status: str = "unavailable"
+    metrics: list[HazardSummaryItem] = Field(default_factory=list)
+    valid_cells: int = 0
+    total_cells: int = 0
+    coverage: float = 0.0
+    favourable_cells: int = 0
+    rapid_intensification_cells: int = 0
+    min_valid_depth_m: float = 300.0
+    provenance: str = ""
+    caveat: str = ""

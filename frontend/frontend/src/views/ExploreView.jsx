@@ -2,7 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import MapHeatmap from '../components/MapHeatmap';
 import { DepthSlider, DateControl, CompareModeSwitch, SkillMetricCard } from '../components/controls';
 import { VerticalProfileChart } from '../components/charts';
-import { getTemperatureField, getVerticalProfile, getSkillMetrics, getComparison, prettyDate, getSupportedDates } from '../api/oceanembed';
+import {
+  getTemperatureField, getVerticalProfile, getSkillMetrics, getComparison, prettyDate,
+  getSupportedDates, getHazardField, getHazardSummary, HAZARD_VARIABLES, hazardVariableInfo,
+} from '../api/oceanembed';
 
 export default function ExploreView({ date, setDate, depth, setDepth, selected, setSelected }) {
   const [mode, setMode] = useState('model');
@@ -13,6 +16,11 @@ export default function ExploreView({ date, setDate, depth, setDepth, selected, 
   const [frameIdx, setFrameIdx] = useState(0);
   const [loopDates, setLoopDates] = useState([]);
   const [modelF, setModelF] = useState(null);
+  const [hazardVar, setHazardVar] = useState('tchp');
+  const [hazardF, setHazardF] = useState(null);
+  const [hazardError, setHazardError] = useState(null);
+  const [hazardLoading, setHazardLoading] = useState(false);
+  const [hazardSummary, setHazardSummary] = useState(null);
   const [fieldError, setFieldError] = useState(null);
   const [fieldLoading, setFieldLoading] = useState(true);
   const [profile, setProfile] = useState(null);
@@ -52,6 +60,28 @@ export default function ExploreView({ date, setDate, depth, setDepth, selected, 
     return () => { dead = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effDate, depth]);
+
+  // Cyclone-risk diagnostics. Depth-integrated, so this does not depend on `depth`.
+  // A null cell means the column was too shallow to integrate safely -- it is shown as
+  // blank, never as a low value, because a low TCHP beside a coast would read as low risk.
+  useEffect(() => {
+    if (mode !== 'hazard') return undefined;
+    let dead = false;
+    setHazardLoading(true); setHazardError(null);
+    getHazardField({ date: effDate, variable: hazardVar })
+      .then((f) => { if (!dead) { setHazardF(f); setHazardLoading(false); } })
+      .catch((e) => { if (!dead) { setHazardError(e.message); setHazardLoading(false); } });
+    return () => { dead = true; };
+  }, [effDate, hazardVar, mode]);
+
+  useEffect(() => {
+    if (mode !== 'hazard') return undefined;
+    let dead = false;
+    getHazardSummary({ date: effDate })
+      .then((s) => { if (!dead) setHazardSummary(s); })
+      .catch(() => { if (!dead) setHazardSummary(null); });
+    return () => { dead = true; };
+  }, [effDate, mode]);
 
   useEffect(() => {
     let dead = false;
@@ -124,11 +154,19 @@ export default function ExploreView({ date, setDate, depth, setDepth, selected, 
     return () => { dead = true; };
   }, []);
 
-  const shown = mode === 'model' ? modelF : null;
+  const hazardInfo = hazardVariableInfo(hazardVar);
+  const shown = mode === 'hazard' ? hazardF : mode === 'model' ? modelF : null;
   const range = useMemo(() => {
+    if (mode === 'hazard') {
+      if (!hazardF) return null;
+      // TCHP has a meaningful physical scale and fixed category breaks, so pin it rather
+      // than autoscaling per day -- otherwise two days cannot be compared by eye.
+      if (hazardVar === 'tchp') return { min: 0, max: 100 };
+      return { min: Math.floor(hazardF.stats.min), max: Math.ceil(hazardF.stats.max) };
+    }
     if (!modelF) return null;
     return { min: Math.floor(modelF.stats.min), max: Math.ceil(modelF.stats.max) };
-  }, [modelF]);
+  }, [modelF, hazardF, mode, hazardVar]);
   const hasSelection = selected && Number.isFinite(selected.lat) && Number.isFinite(selected.lon);
   const comparisonMode = mode !== 'model';
   const fieldUnavailableMessage = mode === 'glorys'
@@ -140,20 +178,41 @@ export default function ExploreView({ date, setDate, depth, setDepth, selected, 
   return (
     <div className="explore-grid">
       <section className="panel map-panel">
-        <h2>Temperature at {depth}m — North Indian Ocean, {prettyDate(effDate)}</h2>
+        <h2>
+          {mode === 'hazard'
+            ? `${hazardInfo.label} — North Indian Ocean, ${prettyDate(effDate)}`
+            : `Temperature at ${depth}m — North Indian Ocean, ${prettyDate(effDate)}`}
+        </h2>
         <div className="map-controls">
           <DateControl date={date} onChange={(d) => { stop(); setDate(d); }} />
           <CompareModeSwitch mode={mode} onChange={setMode} />
         </div>
+        {mode === 'hazard' && (
+          <div className="map-controls">
+            <label className="muted small" htmlFor="hazard-var">Diagnostic</label>
+            <select
+              id="hazard-var"
+              className="select"
+              value={hazardVar}
+              onChange={(e) => setHazardVar(e.target.value)}
+            >
+              {HAZARD_VARIABLES.map((v) => (
+                <option key={v.id} value={v.id}>{v.label} ({v.unit})</option>
+              ))}
+            </select>
+          </div>
+        )}
         {fieldError && <div className="error-box">Failed to load field: {fieldError} <button className="btn small" onClick={() => { cacheRef.current.clear(); stop(); setDate(date); }}>Retry</button></div>}
         <div className="visualization-shell">
-          {mode === 'model' && shown ? (
+          {(mode === 'model' || mode === 'hazard') && shown ? (
             <MapHeatmap
               field={shown}
               mode='sequential'
               fixedRange={range}
               selected={selected} showCoverage={showCoverage} onSelect={setSelected}
             />
+          ) : mode === 'hazard' ? (
+            <div className="loading-panel" />
           ) : mode !== 'model' ? (
             <div className="loading-panel" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#5d6b7a', fontWeight: 600 }}>
               {fieldUnavailableMessage}
@@ -161,9 +220,26 @@ export default function ExploreView({ date, setDate, depth, setDepth, selected, 
           ) : (
             <div className="loading-panel" />
           )}
-          {fieldLoading && mode === 'model' && <div className="loading-overlay"><span>Updating visualization…</span></div>}
+          {(fieldLoading || hazardLoading) && (mode === 'model' || mode === 'hazard') && (
+            <div className="loading-overlay"><span>Updating visualization…</span></div>
+          )}
         </div>
-        <DepthSlider depth={depth} onChange={(d) => { stop(); setDepth(d); }} />
+        {mode === 'hazard'
+          ? (
+            <div className="notice" style={{ marginTop: 8 }}>
+              {hazardInfo.label} is integrated over the full 0&#8211;1000 m column, so the depth
+              slider does not apply. Switch back to OceanEmbed to choose a depth.
+            </div>
+          )
+          : <DepthSlider depth={depth} onChange={(d) => { stop(); setDepth(d); }} />}
+        {hazardError && mode === 'hazard' && (
+          <div className="error-box">Failed to load the cyclone diagnostics: {hazardError}</div>
+        )}
+        {mode === 'hazard' && hazardSummary && hazardSummary.status !== 'available' && (
+          <div className="notice">
+            Cyclone diagnostics are unavailable for this date. No values are shown rather than substitutes.
+          </div>
+        )}
         <div className="map-controls">
           {playing
             ? <button className="btn" onClick={stop}>⏸ Pause animation</button>
@@ -175,10 +251,52 @@ export default function ExploreView({ date, setDate, depth, setDepth, selected, 
         </div>
         <div className="muted small">
           {mode === 'model' && 'Showing OceanEmbed reconstruction.'}
+          {mode === 'hazard' && 'Showing a cyclone-relevant diagnostic derived from the reconstruction.'}
           {mode === 'glorys' && 'Showing selected-point GLORYS comparison.'}
           {mode === 'diff' && 'Showing selected-point difference at the chosen location.'}
           {' '}Click map to select a profile location.
         </div>
+        {mode === 'hazard' && hazardSummary && hazardSummary.status === 'available' && (
+          <div className="comparison-card">
+            <div className="comparison-head">
+              <span>Cyclone-relevant counts for {prettyDate(hazardSummary.date)}</span>
+              <strong>{(hazardSummary.coverage * 100).toFixed(1)}% of grid cells</strong>
+            </div>
+            <div className="comparison-grid">
+              <div className="comparison-stat">
+                <span>Favourable for intensification</span>
+                <strong>{hazardSummary.favourableCells.toLocaleString()}</strong>
+                <div className="muted small" style={{ marginTop: 4 }}>cells with TCHP &#8805; 50 kJ/cm&#178;</div>
+              </div>
+              <div className="comparison-stat highlight">
+                <span>Rapid-intensification potential</span>
+                <strong>{hazardSummary.rapidIntensificationCells.toLocaleString()}</strong>
+                <div className="muted small" style={{ marginTop: 4 }}>cells with TCHP &#8805; 80 kJ/cm&#178;</div>
+              </div>
+              <div className="comparison-stat">
+                <span>Median TCHP</span>
+                <strong>
+                  {(() => {
+                    const t = hazardSummary.metrics.find((m) => m.variable === 'tchp');
+                    return t && t.median != null ? `${t.median.toFixed(1)} kJ/cm\u00b2` : 'Unavailable';
+                  })()}
+                </strong>
+              </div>
+              <div className="comparison-stat">
+                <span>Cells with a value</span>
+                <strong>{hazardSummary.validCells.toLocaleString()} / {hazardSummary.totalCells.toLocaleString()}</strong>
+                <div className="muted small" style={{ marginTop: 4 }}>
+                  columns shallower than {hazardSummary.minValidDepthM}m are excluded
+                </div>
+              </div>
+            </div>
+            {hazardF && hazardF.caveat && (
+              <div className="notice" style={{ marginTop: 8 }}>
+                <strong>Diagnostic, not an operational hazard forecast.</strong> {hazardF.caveat}
+              </div>
+            )}
+          </div>
+        )}
         {comparisonMode && (
           <div className="comparison-card">
             <div className="comparison-head">
@@ -275,9 +393,9 @@ export default function ExploreView({ date, setDate, depth, setDepth, selected, 
         <h3>Skill at {depth}m</h3>
         {skill ? (
           <div className="metric-row">
-            <SkillMetricCard label="RMSE" value={skill.rmse.toFixed(2)} unit=" °C" />
-            <SkillMetricCard label="Correlation" value={skill.correlation.toFixed(3)} unit="" />
-            <SkillMetricCard label="Bias" value={skill.bias.toFixed(2)} unit=" °C" />
+            <SkillMetricCard label="RMSE" value={skill.rmse == null ? '—' : skill.rmse.toFixed(2)} unit=" °C" />
+            <SkillMetricCard label="Correlation" value={skill.correlation == null ? '—' : skill.correlation.toFixed(3)} unit="" />
+            <SkillMetricCard label="Bias" value={skill.bias == null ? '—' : skill.bias.toFixed(2)} unit=" °C" />
           </div>
         ) : (
           <div className="notice">Validation metrics available in Validate.</div>

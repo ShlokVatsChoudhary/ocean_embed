@@ -5,6 +5,7 @@ from app.core.config import get_settings
 
 from app.api.routes.argo import router as argo_router
 from app.api.routes.comparison import router as comparison_router
+from app.api.routes.hazard import router as hazard_router
 from app.api.routes.metadata import router as metadata_router
 from app.api.routes.profile import router as profile_router
 from app.api.routes.temperature import router as temperature_router
@@ -31,6 +32,7 @@ app.include_router(temperature_router)
 app.include_router(profile_router)
 app.include_router(comparison_router)
 app.include_router(validation_router)
+app.include_router(hazard_router)
 app.include_router(argo_router)
 
 
