@@ -5,6 +5,15 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 const TOP_LEGEND = { verticalAlign: 'top', align: 'center', wrapperStyle: { fontSize: 12, paddingBottom: 4 } };
 const TICK = { fontSize: 11 };
 
+// Series colours come from theme tokens so a re-skin needs no code change here.
+const C = {
+  model: 'var(--chart-model, #0b5fff)',
+  glorys: 'var(--chart-glorys, #0a8a3c)',
+  argo: 'var(--chart-argo, #d62728)',
+  bias: 'var(--chart-bias, #ff7f0e)',
+  ref: 'var(--chart-ref, #333333)',
+};
+
 // VerticalProfileChart: temperature (x) vs depth (y, 0 top). Series: model, argo, glorys.
 export function VerticalProfileChart({ profile, showGlorys = true, height = 380 }) {
   if (!profile) return <div className="muted">No profile.</div>;
@@ -29,9 +38,9 @@ export function VerticalProfileChart({ profile, showGlorys = true, height = 380 
           />
           <Tooltip formatter={(v) => [`${v} °C`]} labelFormatter={(d) => `${d} m`} />
           <Legend {...TOP_LEGEND} />
-          <Line type="monotone" dataKey="OceanEmbed" stroke="#0b5fff" strokeWidth={2.5} dot={{ r: 3 }} connectNulls />
-          {showGlorys && <Line type="monotone" dataKey="GLORYS" stroke="#0a8a3c" strokeWidth={1.8} strokeDasharray="6 3" dot={false} connectNulls />}
-          {profile.argo && <Line type="monotone" dataKey="ARGO" stroke="#d62728" strokeWidth={1.8} strokeDasharray="2 3" dot={{ r: 3 }} connectNulls />}
+          <Line type="monotone" dataKey="OceanEmbed" stroke={C.model} strokeWidth={2.5} dot={{ r: 3 }} connectNulls />
+          {showGlorys && <Line type="monotone" dataKey="GLORYS" stroke={C.glorys} strokeWidth={1.8} strokeDasharray="6 3" dot={false} connectNulls />}
+          {profile.argo && <Line type="monotone" dataKey="ARGO" stroke={C.argo} strokeWidth={1.8} strokeDasharray="2 3" dot={{ r: 3 }} connectNulls />}
         </LineChart>
       </ResponsiveContainer>
       {!profile.argo && <div className="muted small">No ARGO profile at this location/date — showing model + GLORYS only.</div>}
@@ -55,8 +64,8 @@ export function DepthPerformanceChart({ metrics }) {
         />
         <Tooltip />
         <Legend {...TOP_LEGEND} />
-        <Line type="monotone" dataKey="RMSE" stroke="#d62728" strokeWidth={2} dot={{ r: 3 }} />
-        <Line type="monotone" dataKey="Bias" stroke="#ff7f0e" strokeWidth={2} strokeDasharray="5 3" dot={false} />
+        <Line type="monotone" dataKey="RMSE" stroke={C.argo} strokeWidth={2} dot={{ r: 3 }} />
+        <Line type="monotone" dataKey="Bias" stroke={C.bias} strokeWidth={2} strokeDasharray="5 3" dot={false} />
       </LineChart>
     </ResponsiveContainer>
   );
@@ -79,8 +88,8 @@ export function ArgoScatter({ points }) {
         />
         <Tooltip cursor={{ strokeDasharray: '3 3' }} />
         <Legend {...TOP_LEGEND} />
-        <Scatter name="Pred vs Obs" data={points} fill="#0b5fff" opacity={0.55} />
-        <ReferenceLine segment={[{ x: min, y: min }, { x: max, y: max }]} stroke="#333" strokeDasharray="5 4" label={{ value: '1:1', fontSize: 11, position: 'insideTopRight' }} />
+        <Scatter name="Pred vs Obs" data={points} fill={C.model} opacity={0.55} />
+        <ReferenceLine segment={[{ x: min, y: min }, { x: max, y: max }]} stroke={C.ref} strokeDasharray="5 4" label={{ value: '1:1', fontSize: 11, position: 'insideTopRight' }} />
       </ScatterChart>
     </ResponsiveContainer>
   );

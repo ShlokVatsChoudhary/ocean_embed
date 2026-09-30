@@ -72,6 +72,10 @@ class TemperatureFieldMetadata(BaseModel):
             "longitude_max": None,
         }
     )
+    #: Which dataset produced this field. Left unset for the model's own output and
+    #: set to the reference source for /api/reference, so a reference field can never
+    #: be mistaken for a model prediction (or for validation data).
+    source: str | None = None
 
 
 class TemperatureResponse(BaseModel):

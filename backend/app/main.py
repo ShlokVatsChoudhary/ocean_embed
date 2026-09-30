@@ -8,6 +8,7 @@ from app.api.routes.comparison import router as comparison_router
 from app.api.routes.hazard import router as hazard_router
 from app.api.routes.metadata import router as metadata_router
 from app.api.routes.profile import router as profile_router
+from app.api.routes.reference import router as reference_router
 from app.api.routes.temperature import router as temperature_router
 from app.api.routes.validation import router as validation_router
 
@@ -29,6 +30,7 @@ app.add_middleware(
 
 app.include_router(metadata_router)
 app.include_router(temperature_router)
+app.include_router(reference_router)
 app.include_router(profile_router)
 app.include_router(comparison_router)
 app.include_router(validation_router)

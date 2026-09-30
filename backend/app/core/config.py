@@ -43,15 +43,20 @@ class Settings(BaseSettings):
     #: Optional root holding a live GLORYS archive.
     glorys_root: Path | None = None
 
-    #: Browser origins allowed to call the API. Vite serves the dev UI on 5173 and the built
-    #: preview on 4173; both loopback spellings are included so the demo works regardless of
-    #: which one is used. Override with OCEANEMBED_CORS_ORIGINS as a JSON list.
+    #: Browser origins allowed to call the API. Vite serves the main dev UI on 5173 and the
+    #: console UI on 5174, with 4173/4174 for their built previews; both loopback spellings are
+    #: included so the demo works regardless of which one is used. Override with
+    #: OCEANEMBED_CORS_ORIGINS as a JSON list.
     cors_origins: list[str] = Field(
         default_factory=lambda: [
             "http://localhost:5173",
             "http://127.0.0.1:5173",
+            "http://localhost:5174",
+            "http://127.0.0.1:5174",
             "http://localhost:4173",
             "http://127.0.0.1:4173",
+            "http://localhost:4174",
+            "http://127.0.0.1:4174",
         ]
     )
 

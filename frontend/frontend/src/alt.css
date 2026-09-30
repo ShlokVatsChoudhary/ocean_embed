@@ -1,0 +1,467 @@
+/* ============================================================
+   OceanEmbed — "Instrument" theme  (ALTERNATIVE LOOK & FEEL)
+
+   This file is purely additive. Nothing here applies unless <body>
+   carries the `alt-theme` class, which App.jsx adds only when the URL
+   asks for it (?ui=alt). The original "Editorial" theme and every
+   component keep working exactly as before.
+
+   Design intent — deliberately the opposite of the warm-paper editorial
+   look:
+     · abyss-navy ground with a soft overhead glow, not paper
+     · one cold luminous accent (sonar cyan), not warm amber rules
+     · glass panels with light bleed, not hairline borders
+     · tight system-sans display type, not a warm serif
+     · mono retained for anything that is a measurement
+   ============================================================ */
+
+body.alt-theme {
+  /* ---- ground ---- */
+  --paper: #04121d;
+  --panel: #0a1e2e;
+  --panel-sunk: #071726;
+
+  /* ---- type ---- */
+  --ink: #57d8ff;
+  --ink-soft: #b9e6f7;
+  --text: #d8e9f2;
+  --text-muted: #92aec0;
+  --text-faint: #5d7d92;
+
+  /* ---- lines ---- */
+  --rule: #12344a;
+  --rule-strong: #1b4a68;
+
+  /* ---- signal colours ---- */
+  --amber-bg: #2a2010;
+  --amber-border: #8a6a24;
+  --amber-dot: #ffc14d;
+  --amber-text: #f3d79a;
+
+  --danger-bg: #2c1512;
+  --danger-border: #9c4737;
+  --danger-text: #ffb3a0;
+
+  --ocean-100: #0e2a3f;
+
+  /* ---- geometry: rounder, softer than the editorial theme ---- */
+  --radius-sm: 8px;
+  --radius-md: 14px;
+
+  /* ---- type families: system sans for display, mono for measurements ---- */
+  --font-serif: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif;
+  --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'SF Mono', ui-monospace, 'IBM Plex Mono', Menlo, monospace;
+
+  /* ---- component tokens (canvas + charts) ---- */
+  --canvas-bg: #061a29;
+  --canvas-empty: #0b2436;
+  --canvas-dim: rgba(3, 12, 20, 0.66);
+  --canvas-hatch: rgba(87, 216, 255, 0.22);
+  --canvas-grid: rgba(87, 216, 255, 0.09);
+  --canvas-axis: #7fa6bb;
+  --canvas-marker: #dff3fb;
+  --canvas-marker-alert: #ff5c4d;
+  --canvas-marker-ring: #04121d;
+  --canvas-focus: #57d8ff;
+  --canvas-edge: #1b4a68;
+  --legend-text: #8fb0c2;
+  --tooltip-bg: rgba(4, 20, 32, 0.96);
+  --tooltip-fg: #e6f6ff;
+  --tooltip-ring: rgba(87, 216, 255, 0.28);
+  --tooltip-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+
+  --chart-model: #57d8ff;
+  --chart-glorys: #4ade80;
+  --chart-argo: #ff8fa3;
+  --chart-bias: #ffc14d;
+  --chart-ref: #7fa6bb;
+  --chart-grid: rgba(87, 216, 255, 0.10);
+  --chart-tick: #7fa6bb;
+
+  --muted-strong: #92aec0;
+  --notice-accent: #ffc14d;
+
+  background: var(--paper);
+  color: var(--text);
+}
+
+/* The ambient glow that gives the dark theme its depth. Sits behind content. */
+body.alt-theme::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(1100px 520px at 18% -8%, rgba(87, 216, 255, 0.13), transparent 62%),
+    radial-gradient(900px 600px at 88% 4%, rgba(56, 130, 246, 0.10), transparent 60%),
+    radial-gradient(1000px 700px at 50% 108%, rgba(12, 74, 110, 0.30), transparent 65%);
+}
+body.alt-theme .app,
+body.alt-theme .hero-page {
+  position: relative;
+  z-index: 1;
+}
+
+/* ---------------------------------------------------------------
+   Typography — tighter, cooler, more confident
+   --------------------------------------------------------------- */
+body.alt-theme .brand-name {
+  font-family: var(--font-serif);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-size: 20px;
+}
+body.alt-theme .brand-icon { color: var(--ink); text-shadow: 0 0 14px rgba(87, 216, 255, 0.55); }
+body.alt-theme .brand-sub {
+  border-left-color: var(--rule-strong);
+  color: var(--text-faint);
+  letter-spacing: 0.04em;
+}
+
+/* ---------------------------------------------------------------
+   Chrome
+   --------------------------------------------------------------- */
+body.alt-theme .topbar {
+  padding: 16px 32px;
+  background: rgba(4, 18, 29, 0.82);
+  border-bottom: 1px solid var(--rule);
+  backdrop-filter: blur(14px) saturate(140%);
+  position: sticky;
+  top: 0;
+  z-index: 40;
+}
+body.alt-theme .nav { gap: 8px; }
+body.alt-theme .nav-pill {
+  padding: 7px 14px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text-muted);
+  transition: color 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+}
+body.alt-theme .nav-pill:hover { color: var(--ink); background: rgba(87, 216, 255, 0.07); }
+body.alt-theme .nav-pill.active {
+  color: var(--ink);
+  background: rgba(87, 216, 255, 0.11);
+  border-color: rgba(87, 216, 255, 0.34);
+  border-bottom-color: rgba(87, 216, 255, 0.34);
+  box-shadow: 0 0 0 1px rgba(87, 216, 255, 0.10), 0 6px 20px -8px rgba(87, 216, 255, 0.55);
+}
+
+/* ---------------------------------------------------------------
+   Panels — glass, not paper
+   --------------------------------------------------------------- */
+body.alt-theme .panel {
+  background:
+    linear-gradient(180deg, rgba(87, 216, 255, 0.055), rgba(87, 216, 255, 0) 42%),
+    linear-gradient(180deg, var(--panel), var(--panel-sunk));
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-md);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.05) inset,
+    0 20px 45px -30px rgba(0, 0, 0, 0.9);
+}
+body.alt-theme .panel h2 {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--ink);
+  border-bottom-color: var(--rule);
+  padding-bottom: 11px;
+}
+body.alt-theme .panel h3 { letter-spacing: 0.02em; color: var(--ink-soft); }
+body.alt-theme .panel h4 { color: var(--text-faint); letter-spacing: 0.06em; text-transform: uppercase; font-size: 11px; }
+
+/* ---------------------------------------------------------------
+   Metrics — the numbers should read like an instrument
+   --------------------------------------------------------------- */
+body.alt-theme .metric-tile {
+  background: linear-gradient(180deg, rgba(87, 216, 255, 0.07), rgba(87, 216, 255, 0));
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset;
+}
+body.alt-theme .metric-label { color: var(--text-faint); letter-spacing: 0.09em; text-transform: uppercase; }
+body.alt-theme .metric-value {
+  color: var(--ink);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  text-shadow: 0 0 22px rgba(87, 216, 255, 0.35);
+}
+
+/* ---------------------------------------------------------------
+   Controls
+   --------------------------------------------------------------- */
+body.alt-theme .btn {
+  background: linear-gradient(180deg, #7fe4ff, #33c4f0);
+  border: 1px solid rgba(87, 216, 255, 0.55);
+  color: #04121d;
+  border-radius: 999px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  box-shadow: 0 8px 24px -12px rgba(87, 216, 255, 0.85);
+  transition: transform 0.14s ease, box-shadow 0.14s ease, filter 0.14s ease;
+}
+body.alt-theme .btn:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); box-shadow: 0 12px 28px -12px rgba(87, 216, 255, 0.95); }
+body.alt-theme .btn:active:not(:disabled) { transform: translateY(0); }
+body.alt-theme .btn:disabled { opacity: 0.34; box-shadow: none; }
+body.alt-theme .btn.small { padding: 5px 12px; }
+
+body.alt-theme .seg {
+  border: 1px solid var(--rule-strong);
+  border-radius: 999px;
+  background: var(--panel-sunk);
+  padding: 3px;
+  gap: 2px;
+}
+body.alt-theme .seg-btn {
+  background: transparent;
+  border: none;
+  border-right: none;
+  border-radius: 999px;
+  color: var(--text-muted);
+  padding: 7px 15px;
+}
+body.alt-theme .seg-btn:hover { background: rgba(87, 216, 255, 0.08); color: var(--ink); }
+body.alt-theme .seg-btn.active {
+  background: linear-gradient(180deg, #7fe4ff, #33c4f0);
+  color: #04121d;
+  box-shadow: 0 6px 18px -10px rgba(87, 216, 255, 0.95);
+}
+body.alt-theme .seg-btn.active:hover { background: linear-gradient(180deg, #7fe4ff, #33c4f0); color: #04121d; }
+
+body.alt-theme .ctl-row input[type='date'] {
+  background: var(--panel-sunk);
+  border: 1px solid var(--rule-strong);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 6px 12px;
+  color-scheme: dark;
+}
+body.alt-theme .ctl-row label { color: var(--text-faint); letter-spacing: 0.08em; text-transform: uppercase; font-family: var(--font-mono); }
+body.alt-theme .depth-readout { color: var(--ink); }
+
+body.alt-theme input[type='range'] { accent-color: var(--ink); }
+body.alt-theme input[type='checkbox'] { accent-color: var(--ink); }
+body.alt-theme .check { color: var(--text-muted); }
+
+/* ---------------------------------------------------------------
+   Surfaces
+   --------------------------------------------------------------- */
+body.alt-theme .visualization-shell,
+body.alt-theme .loading-panel,
+body.alt-theme .comparison-card {
+  background: var(--panel-sunk);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+}
+body.alt-theme .loading-overlay {
+  background: rgba(4, 18, 29, 0.72);
+  color: var(--ink);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 11.5px;
+  backdrop-filter: blur(2px);
+}
+body.alt-theme .loading-overlay::before {
+  border-color: rgba(87, 216, 255, 0.22);
+  border-top-color: var(--ink);
+}
+body.alt-theme .comparison-stat { background: var(--panel); border-color: var(--rule); border-radius: var(--radius-sm); }
+body.alt-theme .comparison-stat span { color: var(--text-faint); }
+body.alt-theme .comparison-stat strong { color: var(--ink); }
+body.alt-theme .comparison-stat.highlight {
+  background: rgba(87, 216, 255, 0.09);
+  border-color: rgba(87, 216, 255, 0.36);
+}
+body.alt-theme .comparison-head span { color: var(--text-faint); }
+body.alt-theme .comparison-head strong { color: var(--ink-soft); }
+
+/* ---------------------------------------------------------------
+   Table
+   --------------------------------------------------------------- */
+body.alt-theme .skill-table th,
+body.alt-theme .skill-table td { border-bottom-color: var(--rule); }
+body.alt-theme .skill-table thead th {
+  background: var(--panel-sunk);
+  color: var(--text-faint);
+  border-bottom-color: var(--rule-strong);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+body.alt-theme .skill-table tbody tr:hover td { background: rgba(87, 216, 255, 0.05); }
+body.alt-theme .row-hl td {
+  background: rgba(87, 216, 255, 0.10);
+  color: var(--ink);
+  box-shadow: inset 3px 0 0 var(--ink);
+}
+body.alt-theme .row-hl:hover td { background: rgba(87, 216, 255, 0.14); }
+
+/* ---------------------------------------------------------------
+   Notice / error / alert
+   --------------------------------------------------------------- */
+body.alt-theme .notice { border-radius: var(--radius-sm); }
+body.alt-theme .alert-banner { background: rgba(42, 32, 16, 0.75); border-bottom-color: var(--amber-border); }
+body.alt-theme .error-box { border-radius: var(--radius-sm); }
+body.alt-theme .loading { background: var(--panel-sunk); border-color: var(--rule-strong); border-radius: var(--radius-sm); }
+
+/* ---------------------------------------------------------------
+   Status bar
+   --------------------------------------------------------------- */
+body.alt-theme .statusbar {
+  background: rgba(4, 18, 29, 0.85);
+  border-top: 1px solid var(--rule);
+  color: var(--text-faint);
+  backdrop-filter: blur(10px);
+}
+
+/* ---------------------------------------------------------------
+   Recharts
+   --------------------------------------------------------------- */
+body.alt-theme .recharts-cartesian-grid line { stroke: var(--chart-grid); }
+body.alt-theme .recharts-cartesian-axis-line { stroke: var(--rule-strong); }
+body.alt-theme .recharts-legend-item-text { color: var(--text-muted) !important; }
+
+/* ---------------------------------------------------------------
+   Scrollbars
+   --------------------------------------------------------------- */
+body.alt-theme ::-webkit-scrollbar { width: 10px; height: 10px; }
+body.alt-theme ::-webkit-scrollbar-track { background: var(--panel-sunk); }
+body.alt-theme ::-webkit-scrollbar-thumb {
+  background: var(--rule-strong);
+  border-radius: 999px;
+  border: 2px solid var(--panel-sunk);
+}
+body.alt-theme ::-webkit-scrollbar-thumb:hover { background: #2a6a90; }
+
+/* ---------------------------------------------------------------
+   The theme switcher chip, shown in the footer of both themes.
+   --------------------------------------------------------------- */
+.theme-swap {
+  border: 1px solid var(--rule-strong);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 999px;
+  padding: 3px 11px;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  margin-left: auto;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.theme-swap:hover { color: var(--ink); border-color: var(--ink); }
+
+/* ---------------------------------------------------------------
+   Hero — instrument front page
+   --------------------------------------------------------------- */
+body.alt-theme .hero-page { background: transparent; }
+body.alt-theme .hero-topbar {
+  padding: 22px 60px;
+  border-bottom: 1px solid var(--rule);
+  backdrop-filter: blur(12px);
+}
+body.alt-theme .hero-nav-link { letter-spacing: 0.02em; color: var(--text-muted); }
+body.alt-theme .hero-nav-link:hover { color: var(--ink); }
+
+body.alt-theme .hero-content { padding: 44px 60px 36px; gap: 52px; max-width: 1280px; }
+
+body.alt-theme .hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 10.5px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: rgba(87, 216, 255, 0.08);
+  border: 1px solid rgba(87, 216, 255, 0.26);
+  border-radius: 999px;
+  padding: 6px 14px;
+  margin-bottom: 22px;
+  align-self: flex-start;
+}
+body.alt-theme .hero-headline {
+  font-family: var(--font-serif);
+  font-size: 54px;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.04;
+  color: #eaf7ff;
+  max-width: 11em;
+  margin-bottom: 20px;
+}
+body.alt-theme .hero-headline em {
+  font-style: normal;
+  color: var(--ink);
+  text-shadow: 0 0 34px rgba(87, 216, 255, 0.45);
+}
+body.alt-theme .hero-sub { font-size: 16.5px; line-height: 1.6; color: var(--text-muted); max-width: 34em; }
+
+body.alt-theme .hero-chart-card {
+  background:
+    linear-gradient(180deg, rgba(87, 216, 255, 0.06), rgba(87, 216, 255, 0) 50%),
+    linear-gradient(180deg, var(--panel), var(--panel-sunk));
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-md);
+  box-shadow: 0 30px 70px -40px rgba(0, 0, 0, 1), 0 1px 0 rgba(255, 255, 255, 0.05) inset;
+  padding: 22px 20px 16px;
+}
+body.alt-theme .hero-chart-caption {
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+}
+body.alt-theme .hero-legend { color: var(--text-muted); }
+body.alt-theme .hero-swatch { height: 3px; border-radius: 999px; }
+
+body.alt-theme .hero-footer {
+  border-top: 1px solid var(--rule);
+  color: var(--text-faint);
+  letter-spacing: 0.08em;
+}
+
+/* Stat strip unique to the alternative hero. */
+.alt-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--rule);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  margin-top: 30px;
+}
+.alt-stat { background: var(--panel-sunk); padding: 14px 16px; }
+.alt-stat b {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+  text-shadow: 0 0 20px rgba(87, 216, 255, 0.3);
+}
+.alt-stat span {
+  display: block;
+  font-size: 10.5px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-top: 5px;
+}
+@media (max-width: 640px) { .alt-stats { grid-template-columns: 1fr; } }
+
+/* A luminous hairline that separates the hero copy from the visual. */
+.alt-rule {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(87, 216, 255, 0.55), transparent);
+  margin: 26px 0 0;
+}

@@ -2,19 +2,35 @@
 #
 # One-command launcher for the OceanEmbed demo.
 #
-#   ./run.sh          start backend + frontend, open http://localhost:5173
-#   ./run.sh --stop   stop anything left running from a previous start
+#   ./run.sh             start backend + both UIs, open the console
+#   ./run.sh --console   start backend + the console UI only   (:5174)
+#   ./run.sh --original  start backend + the original UI only  (:5173)
+#   ./run.sh --stop      stop anything left running from a previous start
 #
 # Backend:  http://localhost:8000  (API + docs at /docs)
-# Frontend: http://localhost:5173  (the UI you actually look at)
+# Console:  http://localhost:5174  (the single-screen instrument UI)
+# Original: http://localhost:5173  (the tabbed dashboard, kept for comparison)
 #
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_PORT=8000
-FRONTEND_PORT=5173
+ORIGINAL_PORT=5173
+CONSOLE_PORT=5174
 LOG_DIR="$ROOT/.run-logs"
 PID_FILE="$LOG_DIR/pids"
+
+ORIGINAL_DIR="$ROOT/frontend/frontend"
+CONSOLE_DIR="$ROOT/frontend/console"
+
+MODE="both"
+case "${1:-}" in
+  --stop)     MODE="stop" ;;
+  --console)  MODE="console" ;;
+  --original) MODE="original" ;;
+  "")         MODE="both" ;;
+  *) echo "Unknown option: $1 (expected --console, --original or --stop)" >&2; exit 2 ;;
+esac
 
 stop_all() {
   if [[ -f "$PID_FILE" ]]; then
@@ -25,11 +41,11 @@ stop_all() {
   fi
   # Belt and braces: catch anything started by an earlier run.
   pkill -f "uvicorn app.main:app --port $BACKEND_PORT" 2>/dev/null || true
-  pkill -f "vite --port $FRONTEND_PORT" 2>/dev/null || true
-  pkill -f "vite.*--port $FRONTEND_PORT" 2>/dev/null || true
+  pkill -f "vite.*--port $ORIGINAL_PORT" 2>/dev/null || true
+  pkill -f "vite.*--port $CONSOLE_PORT" 2>/dev/null || true
 }
 
-if [[ "${1:-}" == "--stop" ]]; then
+if [[ "$MODE" == "stop" ]]; then
   stop_all
   echo "Stopped."
   exit 0
@@ -52,17 +68,34 @@ for mod in ("fastapi", "uvicorn", "tensorflow", "xarray", "netCDF4", "pydantic_s
     importlib.import_module(mod)
 PY
 
-if [[ ! -d "$ROOT/frontend/frontend/node_modules" ]]; then
-  echo "Installing frontend dependencies (first run only)…"
-  (cd "$ROOT/frontend/frontend" && npm install --silent)
-fi
+# Both UIs need their own dependencies and their own API base.
+prepare_ui() {
+  local dir="$1" port="$2" name="$3"
+  if [[ ! -d "$dir/node_modules" ]]; then
+    echo "Installing $name dependencies (first run only)…"
+    (cd "$dir" && npm install --silent)
+  fi
+  if [[ ! -f "$dir/.env" ]]; then
+    echo "VITE_API_BASE=http://localhost:$BACKEND_PORT" > "$dir/.env"
+  fi
+}
 
-if [[ ! -f "$ROOT/frontend/frontend/.env" ]]; then
-  echo "VITE_API_BASE=http://localhost:$BACKEND_PORT" > "$ROOT/frontend/frontend/.env"
-fi
+WANT_ORIGINAL=false
+WANT_CONSOLE=false
+case "$MODE" in
+  both)     WANT_ORIGINAL=true; WANT_CONSOLE=true ;;
+  original) WANT_ORIGINAL=true ;;
+  console)  WANT_CONSOLE=true ;;
+esac
+
+if $WANT_ORIGINAL; then prepare_ui "$ORIGINAL_DIR" "$ORIGINAL_PORT" "original UI"; fi
+if $WANT_CONSOLE;  then prepare_ui "$CONSOLE_DIR"  "$CONSOLE_PORT"  "console"; fi
 
 # ----------------------------------------------------------- port availability
-for port in "$BACKEND_PORT" "$FRONTEND_PORT"; do
+PORTS=("$BACKEND_PORT")
+if $WANT_ORIGINAL; then PORTS+=("$ORIGINAL_PORT"); fi
+if $WANT_CONSOLE;  then PORTS+=("$CONSOLE_PORT"); fi
+for port in "${PORTS[@]}"; do
   if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
     echo "ERROR: port $port is already in use. Run ./run.sh --stop, or free the port." >&2
     exit 1
@@ -91,32 +124,43 @@ if ! curl -sf "http://127.0.0.1:$BACKEND_PORT/health" >/dev/null 2>&1; then
 fi
 echo "  backend healthy."
 
-echo "Starting frontend on :$FRONTEND_PORT …"
-(cd "$ROOT/frontend/frontend" && npm run dev -- --port "$FRONTEND_PORT" \
-    > "$LOG_DIR/frontend.log" 2>&1) &
-echo $! >> "$PID_FILE"
+start_ui() {
+  local dir="$1" port="$2" name="$3" log="$4"
+  echo "Starting $name on :$port …"
+  (cd "$dir" && npm run dev -- --port "$port" > "$LOG_DIR/$log" 2>&1) &
+  echo $! >> "$PID_FILE"
+  for _ in $(seq 1 60); do
+    if curl -sf "http://localhost:$port/" >/dev/null 2>&1; then break; fi
+    sleep 1
+  done
+  if curl -sf "http://localhost:$port/" >/dev/null 2>&1; then
+    echo "  $name ready."
+  else
+    echo "  WARNING: $name did not respond. See $LOG_DIR/$log" >&2
+  fi
+}
 
-for _ in $(seq 1 60); do
-  if curl -sf "http://localhost:$FRONTEND_PORT/" >/dev/null 2>&1; then break; fi
-  sleep 1
-done
+if $WANT_CONSOLE;  then start_ui "$CONSOLE_DIR"  "$CONSOLE_PORT"  "console"     console.log; fi
+if $WANT_ORIGINAL; then start_ui "$ORIGINAL_DIR" "$ORIGINAL_PORT" "original UI" frontend.log; fi
 
 trap stop_all EXIT INT TERM
 
-cat <<EOF
-
-  OceanEmbed is running.
-
-    UI    http://localhost:$FRONTEND_PORT
-    API   http://127.0.0.1:$BACKEND_PORT
-    Docs  http://127.0.0.1:$BACKEND_PORT/docs
-
-  Logs    $LOG_DIR/backend.log
-          $LOG_DIR/frontend.log
-
-  Press Ctrl+C to stop, or run ./run.sh --stop in another terminal.
-
-EOF
+{
+  echo
+  echo "  OceanEmbed is running."
+  echo
+  if $WANT_CONSOLE;  then echo "    Console   http://localhost:$CONSOLE_PORT"; fi
+  if $WANT_ORIGINAL; then echo "    Original  http://localhost:$ORIGINAL_PORT"; fi
+  echo "    API       http://127.0.0.1:$BACKEND_PORT"
+  echo "    Docs      http://127.0.0.1:$BACKEND_PORT/docs"
+  echo
+  echo "  Logs    $LOG_DIR/backend.log"
+  if $WANT_CONSOLE;  then echo "          $LOG_DIR/console.log"; fi
+  if $WANT_ORIGINAL; then echo "          $LOG_DIR/frontend.log"; fi
+  echo
+  echo "  Press Ctrl+C to stop, or run ./run.sh --stop in another terminal."
+  echo
+}
 
 # Warm the model so the first click is not slow. The load takes ~20 s.
 echo "Warming the model (first load ~20 s) …"

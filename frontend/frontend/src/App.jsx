@@ -1,14 +1,28 @@
 import { useEffect, useState } from 'react';
 import Hero from './components/Hero';
+import AltHero from './components/AltHero';
 import ExploreView from './views/ExploreView';
 import AnalyzeView from './views/AnalyzeView';
 import ValidateView from './views/ValidateView';
 import { AlertBanner } from './components/controls';
 import { getAnomalyAlerts, getMetadata, MODEL_VERSION, prettyDate, getSupportedDates } from './api/oceanembed';
+import './alt.css';
+
+// The alternative "Instrument" look is opt-in via ?ui=alt so the default
+// experience is byte-for-byte what it always was. src/alt.css does all the
+// work; this flag only flips a class on <body> and picks the matching hero.
+const PARAMS = typeof window !== 'undefined'
+  ? new URLSearchParams(window.location.search)
+  : new URLSearchParams();
+const ALT = PARAMS.get('ui') === 'alt';
+// ?view=explore|analyze|validate deep-links straight into the dashboard.
+const START_VIEW = ['explore', 'analyze', 'validate'].includes(PARAMS.get('view'))
+  ? PARAMS.get('view')
+  : null;
 
 export default function App() {
-  const [showHero, setShowHero] = useState(true);
-  const [view, setView] = useState('explore');
+  const [showHero, setShowHero] = useState(!START_VIEW);
+  const [view, setView] = useState(START_VIEW || 'explore');
   const [date, setDate] = useState('2020-01-01');
   const [depth, setDepth] = useState(100);
   const [selected, setSelected] = useState({ lat: 12.0, lon: 68.0 });
@@ -16,6 +30,11 @@ export default function App() {
   const [alerts, setAlerts] = useState([]);
   const [meta, setMeta] = useState(null);
   const [dates, setDates] = useState([]);
+
+  useEffect(() => {
+    document.body.classList.toggle('alt-theme', ALT);
+    return () => document.body.classList.remove('alt-theme');
+  }, []);
 
   useEffect(() => {
     let dead = false;
@@ -38,7 +57,9 @@ export default function App() {
   };
 
   if (showHero) {
-    return <Hero onEnter={(v) => { setView(v); setShowHero(false); }} />;
+    return ALT
+      ? <AltHero onEnter={(v) => { setView(v); setShowHero(false); }} />
+      : <Hero onEnter={(v) => { setView(v); setShowHero(false); }} />;
   }
 
   return (
@@ -73,6 +94,9 @@ export default function App() {
         <span>Depth: 0–1000 m</span>
         <span title={meta?.glorysProvenance || ''}>Reference (GLORYS): {meta?.glorysStatus ?? 'unknown'}</span>
         <span title={meta?.argoProvenance || ''}>Validation (ARGO): {meta?.argoStatus ?? 'unknown'}</span>
+        <a className="theme-swap" href={ALT ? './' : './?ui=alt'} title="Switch between the two designs">
+          {ALT ? '⇄ Editorial look' : '⇄ Instrument look'}
+        </a>
       </footer>
     </div>
   );

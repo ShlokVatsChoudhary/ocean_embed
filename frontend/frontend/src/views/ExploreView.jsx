@@ -214,7 +214,7 @@ export default function ExploreView({ date, setDate, depth, setDepth, selected, 
           ) : mode === 'hazard' ? (
             <div className="loading-panel" />
           ) : mode !== 'model' ? (
-            <div className="loading-panel" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#5d6b7a', fontWeight: 600 }}>
+            <div className="loading-panel" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted-strong, #5d6b7a)', fontWeight: 600 }}>
               {fieldUnavailableMessage}
             </div>
           ) : (
@@ -320,7 +320,7 @@ export default function ExploreView({ date, setDate, depth, setDepth, selected, 
               </div>
             )}
             {hasSelection && comparison && comparison.offset_degrees > 1 && (
-              <div className="notice" style={{ borderLeft: '3px solid #b45309' }}>
+              <div className="notice" style={{ borderLeft: '3px solid var(--notice-accent, #b45309)' }}>
                 <strong>Not a local value.</strong> This is a shelf-sea location, so the nearest cell
                 with a complete 0–1000 m column is {comparison.offset_degrees.toFixed(2)}° away
                 ({comparison.grid_latitude.toFixed(2)}°N, {comparison.grid_longitude.toFixed(2)}°E).

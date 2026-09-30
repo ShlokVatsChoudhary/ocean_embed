@@ -36,6 +36,41 @@
   --font-serif: 'Fraunces', Georgia, serif;
   --font-ui: system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
+
+  /* ---------------------------------------------------------------
+     Component colour tokens.
+     These defaults are the values the components used to hard-code, so
+     the theme below renders exactly as it always did. Every token can be
+     re-declared under a scope (see src/alt.css) to re-skin the whole app
+     without touching a single component.
+     --------------------------------------------------------------- */
+  --canvas-bg: #f4f6f8;
+  --canvas-empty: #eef2f7;
+  --canvas-dim: rgba(20, 25, 35, 0.42);
+  --canvas-hatch: rgba(255, 255, 255, 0.35);
+  --canvas-grid: rgba(255, 255, 255, 0.4);
+  --canvas-axis: #33414f;
+  --canvas-marker: #111111;
+  --canvas-marker-alert: #ff3b30;
+  --canvas-marker-ring: #ffffff;
+  --canvas-focus: #000000;
+  --canvas-edge: #cbd2da;
+  --legend-text: #445;
+  --tooltip-bg: rgba(17, 24, 39, 0.92);
+  --tooltip-fg: #ffffff;
+  --tooltip-ring: rgba(255, 255, 255, 0.18);
+  --tooltip-shadow: 0 6px 14px rgba(0, 0, 0, 0.18);
+
+  --chart-model: #0b5fff;
+  --chart-glorys: #0a8a3c;
+  --chart-argo: #d62728;
+  --chart-bias: #ff7f0e;
+  --chart-ref: #333333;
+  --chart-grid: #e3e6ea;
+  --chart-tick: #6b7280;
+
+  --muted-strong: #5d6b7a;
+  --notice-accent: #b45309;
 }
 
 * { box-sizing: border-box; }
@@ -414,6 +449,18 @@ input[type="range"] { accent-color: var(--ink); }
 
 .hero-visual { flex: 0.85; display: flex; align-items: center; justify-content: center; width: 100%; }
 .hero-chart-card { background: var(--panel); border: 1px solid var(--rule); padding: 26px 22px 18px; width: 100%; border-radius: var(--radius-sm); }
+
+/* Recharts theming hooks — the default theme keeps its original colours. */
+.recharts-cartesian-grid line { stroke: var(--chart-grid); }
+.recharts-cartesian-axis-tick-value { fill: var(--chart-tick); }
+.recharts-text.recharts-label { fill: var(--chart-tick); }
+.recharts-default-tooltip {
+  background: var(--tooltip-bg) !important;
+  border: 1px solid var(--tooltip-ring) !important;
+  border-radius: 6px;
+  color: var(--tooltip-fg);
+}
+.recharts-tooltip-item, .recharts-tooltip-label { color: var(--tooltip-fg) !important; }
 .hero-chart-caption { font-size: 11px; color: var(--text-faint); margin-bottom: 10px; }
 .hero-legend { display: flex; gap: 16px; font-size: 11px; color: var(--text-muted); margin-top: 6px; }
 .hero-legend-item { display: flex; align-items: center; gap: 5px; }

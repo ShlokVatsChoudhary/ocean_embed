@@ -1,4 +1,34 @@
 // Shared color ramps. Sequential cold->warm; diverging blue-white-red centered on 0.
+
+// The canvas renderer paints with colours it cannot get from CSS directly, so it
+// resolves the theme tokens once per repaint. Fallbacks mirror the values in
+// index.css :root, which means this returns exactly the old hard-coded colours
+// unless a theme scope (e.g. src/alt.css) has re-declared them.
+export function readTokens(el) {
+  const fallback = {
+    bg: '#f4f6f8', empty: '#eef2f7', dim: 'rgba(20, 25, 35, 0.42)',
+    hatch: 'rgba(255, 255, 255, 0.35)', grid: 'rgba(255, 255, 255, 0.4)',
+    axis: '#33414f', marker: '#111111', markerAlert: '#ff3b30',
+    markerRing: '#ffffff', focus: '#000000', font: 'system-ui',
+  };
+  if (typeof window === 'undefined' || !el) return fallback;
+  const cs = window.getComputedStyle(el);
+  const get = (name, fb) => (cs.getPropertyValue(name) || '').trim() || fb;
+  return {
+    bg: get('--canvas-bg', fallback.bg),
+    empty: get('--canvas-empty', fallback.empty),
+    dim: get('--canvas-dim', fallback.dim),
+    hatch: get('--canvas-hatch', fallback.hatch),
+    grid: get('--canvas-grid', fallback.grid),
+    axis: get('--canvas-axis', fallback.axis),
+    marker: get('--canvas-marker', fallback.marker),
+    markerAlert: get('--canvas-marker-alert', fallback.markerAlert),
+    markerRing: get('--canvas-marker-ring', fallback.markerRing),
+    focus: get('--canvas-focus', fallback.focus),
+    font: get('--font-ui', fallback.font),
+  };
+}
+
 export function seqColor(t) {
   // t in [0,1]; dark blue -> blue -> cyan -> yellow -> red
   const stops = [
