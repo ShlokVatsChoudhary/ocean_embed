@@ -148,14 +148,44 @@ function normalizeField(raw, { date, depth, source }) {
 
 function normalizeProfile(raw, { date, lat, lon }) {
   if (!raw || typeof raw !== 'object') return null;
-  const profileList = Array.isArray(raw.profile) ? raw.profile : [];
-  if (profileList.length === 0) return null;
 
-  const depths = profileList.map((p) => toNum(p.depth));
-  const oceanembed = profileList.map((p) => numOrNull(p.temperature));
+  const series = {
+    oceanembed: Array.isArray(raw.profile) ? raw.profile : [],
+    glorys: Array.isArray(raw.glorys_profile) ? raw.glorys_profile : [],
+    argo: Array.isArray(raw.argo_profile) ? raw.argo_profile : [],
+  };
+
+  const depthSet = new Map();
+  for (const [key, entries] of Object.entries(series)) {
+    entries.forEach((p) => {
+      const depth = toNum(p?.depth);
+      if (!Number.isFinite(depth)) return;
+      const current = depthSet.get(depth) || { depth };
+      current[key] = numOrNull(p?.temperature);
+      depthSet.set(depth, current);
+    });
+  }
+
+  const depths = Array.from(depthSet.keys()).sort((a, b) => a - b);
+  if (depths.length === 0) return null;
+
+  const oceanembed = depths.map((depth) => depthSet.get(depth)?.oceanembed ?? null);
+  const glorys = depths.map((depth) => depthSet.get(depth)?.glorys ?? null);
+  const argo = depths.map((depth) => depthSet.get(depth)?.argo ?? null);
   if (!oceanembed.some((v) => v !== null)) return null;
 
-  return { depths, oceanembed, glorys: Array(depths.length).fill(null), argo: null, lat, lon, date };
+  return {
+    depths,
+    oceanembed,
+    glorys,
+    argo,
+    lat,
+    lon,
+    date,
+    argoDate: raw.argo_date ?? null,
+    timeOffsetDays: numOrNull(raw.time_offset_days),
+    provenance: String(raw.provenance ?? ''),
+  };
 }
 
 // ----------------------------------- ocean hazards
