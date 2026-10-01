@@ -20,8 +20,6 @@ export function VerticalProfileChart({ profile, showGlorys = true, height = 380 
   const data = profile.depths.map((d, i) => ({
     depth: d,
     OceanEmbed: profile.oceanembed[i],
-    ...(showGlorys ? { GLORYS: profile.glorys[i] } : {}),
-    ...(profile.argo ? { ARGO: profile.argo[i] } : {}),
   }));
   return (
     <div>
@@ -39,11 +37,8 @@ export function VerticalProfileChart({ profile, showGlorys = true, height = 380 
           <Tooltip formatter={(v) => [`${v} °C`]} labelFormatter={(d) => `${d} m`} />
           <Legend {...TOP_LEGEND} />
           <Line type="monotone" dataKey="OceanEmbed" stroke={C.model} strokeWidth={2.5} dot={{ r: 3 }} connectNulls />
-          {showGlorys && <Line type="monotone" dataKey="GLORYS" stroke={C.glorys} strokeWidth={1.8} strokeDasharray="6 3" dot={false} connectNulls={false} />}
-          {profile.argo && <Line type="monotone" dataKey="ARGO" stroke={C.argo} strokeWidth={1.8} strokeDasharray="2 3" dot={{ r: 3 }} connectNulls={false} />}
         </LineChart>
       </ResponsiveContainer>
-      {!profile.argo && <div className="muted small">No ARGO profile at this location/date — showing model + GLORYS only.</div>}
     </div>
   );
 }

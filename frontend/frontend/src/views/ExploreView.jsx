@@ -236,6 +236,12 @@ const shown =
       : mode === 'glorys'
         ? referenceF
         : differenceF;
+  const fieldUnavailableMessage =
+    referenceLoading
+      ? 'Loading GLORYS reference…'
+      : referenceError
+        ? 'GLORYS reference unavailable.'
+        : 'No reference field available.';
   const range = useMemo(() => {
     if (mode === 'hazard') {
       if (!hazardF) return null;
