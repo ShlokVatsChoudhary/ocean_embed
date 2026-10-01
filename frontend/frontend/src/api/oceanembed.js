@@ -273,6 +273,12 @@ export async function getTemperatureField({ date, depth, source = 'oceanembed' }
   return normalizeField(raw, { date, depth, source });
 }
 
+export async function getReferenceField({ date, depth } = {}) {
+  const raw = await fetchBackend('getReferenceField', '/api/reference', { date, depth });
+  if (!raw) return null;
+  return normalizeField(raw, { date, depth, source: 'glorys' });
+}
+
 /** Fraction of grid cells with a finite value, straight from the backend. */
 export async function getCoverage({ date, depth } = {}) {
   const raw = await fetchBackend('getCoverage', '/api/temperature/coverage', { date, depth });

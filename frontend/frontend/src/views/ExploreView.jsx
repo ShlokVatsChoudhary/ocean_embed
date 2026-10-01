@@ -3,7 +3,7 @@ import MapHeatmap from '../components/MapHeatmap';
 import { DepthSlider, DateControl, CompareModeSwitch, SkillMetricCard } from '../components/controls';
 import { VerticalProfileChart } from '../components/charts';
 import {
-  getTemperatureField, getVerticalProfile, getSkillMetrics, getComparison, prettyDate,
+  getTemperatureField, getReferenceField, getVerticalProfile, getSkillMetrics, getComparison, prettyDate,
   getSupportedDates, getHazardField, getHazardSummary, HAZARD_VARIABLES, hazardVariableInfo,
 } from '../api/oceanembed';
 
@@ -16,6 +16,9 @@ export default function ExploreView({ date, setDate, depth, setDepth, selected, 
   const [frameIdx, setFrameIdx] = useState(0);
   const [loopDates, setLoopDates] = useState([]);
   const [modelF, setModelF] = useState(null);
+  const [referenceF, setReferenceF] = useState(null);
+  const [referenceLoading, setReferenceLoading] = useState(false);
+  const [referenceError, setReferenceError] = useState(null);
   const [hazardVar, setHazardVar] = useState('tchp');
   const [hazardF, setHazardF] = useState(null);
   const [hazardError, setHazardError] = useState(null);
@@ -60,6 +63,34 @@ export default function ExploreView({ date, setDate, depth, setDepth, selected, 
     return () => { dead = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effDate, depth]);
+
+  useEffect(() => {
+  if (mode !== 'glorys' && mode !== 'diff') {
+    setReferenceLoading(false);
+    return undefined;
+  }
+
+  let dead = false;
+  setReferenceLoading(true);
+  setReferenceError(null);
+
+  getReferenceField({ date: effDate, depth })
+    .then((f) => {
+      if (dead) return;
+      setReferenceF(f);
+      setReferenceLoading(false);
+    })
+    .catch((e) => {
+      if (!dead) {
+        setReferenceError(e.message);
+        setReferenceLoading(false);
+      }
+    });
+
+  return () => {
+    dead = true;
+  };
+}, [effDate, depth, mode]);
 
   // Cyclone-risk diagnostics. Depth-integrated, so this does not depend on `depth`.
   // A null cell means the column was too shallow to integrate safely -- it is shown as
@@ -155,7 +186,56 @@ export default function ExploreView({ date, setDate, depth, setDepth, selected, 
   }, []);
 
   const hazardInfo = hazardVariableInfo(hazardVar);
-  const shown = mode === 'hazard' ? hazardF : mode === 'model' ? modelF : null;
+  const differenceF = useMemo(() => {
+  if (!modelF || !referenceF) return null;
+
+  const values = modelF.values.map((row, i) =>
+    row.map((modelValue, j) => {
+      const referenceValue = referenceF.values?.[i]?.[j];
+
+      if (
+        modelValue === null ||
+        referenceValue === null ||
+        modelValue === undefined ||
+        referenceValue === undefined
+      ) {
+        return null;
+      }
+
+      return Number(modelValue) - Number(referenceValue);
+    })
+  );
+
+  const finite = values.flat().filter(
+    (v) => v !== null && Number.isFinite(v)
+  );
+
+  if (finite.length === 0) return null;
+
+  return {
+    ...modelF,
+    values,
+    coverage: values.map((row) =>
+      row.map((v) => (v !== null ? 1 : 0))
+    ),
+    stats: {
+      min: Math.min(...finite),
+      max: Math.max(...finite),
+      validCount: finite.length,
+      totalCount: values.length * (values[0]?.length ?? 0),
+    },
+    source: 'difference',
+  };
+}, [modelF, referenceF]);
+
+const shown =
+  mode === 'hazard'
+    ? hazardF
+    : mode === 'model'
+      ? modelF
+      : mode === 'glorys'
+        ? referenceF
+        : differenceF;
   const range = useMemo(() => {
     if (mode === 'hazard') {
       if (!hazardF) return null;
@@ -164,16 +244,33 @@ export default function ExploreView({ date, setDate, depth, setDepth, selected, 
       if (hazardVar === 'tchp') return { min: 0, max: 100 };
       return { min: Math.floor(hazardF.stats.min), max: Math.ceil(hazardF.stats.max) };
     }
+      if (mode === 'glorys') {
+    if (!referenceF) return null;
+
+    return {
+      min: Math.floor(referenceF.stats.min),
+      max: Math.ceil(referenceF.stats.max),
+    };
+  }
+
+  if (mode === 'diff') {
+    if (!differenceF) return null;
+
+    const maxAbs = Math.max(
+      Math.abs(differenceF.stats.min),
+      Math.abs(differenceF.stats.max)
+    );
+
+    return {
+      min: -Math.ceil(maxAbs),
+      max: Math.ceil(maxAbs),
+    };
+  }
     if (!modelF) return null;
     return { min: Math.floor(modelF.stats.min), max: Math.ceil(modelF.stats.max) };
   }, [modelF, hazardF, mode, hazardVar]);
   const hasSelection = selected && Number.isFinite(selected.lat) && Number.isFinite(selected.lon);
   const comparisonMode = mode !== 'model';
-  const fieldUnavailableMessage = mode === 'glorys'
-    ? 'GLORYS field data is not available in the current backend contract.'
-    : mode === 'diff'
-      ? 'Difference field data is not available in the current backend contract.'
-      : null;
 
   return (
     <div className="explore-grid">
@@ -204,12 +301,14 @@ export default function ExploreView({ date, setDate, depth, setDepth, selected, 
         )}
         {fieldError && <div className="error-box">Failed to load field: {fieldError} <button className="btn small" onClick={() => { cacheRef.current.clear(); stop(); setDate(date); }}>Retry</button></div>}
         <div className="visualization-shell">
-          {(mode === 'model' || mode === 'hazard') && shown ? (
+          {(mode === 'model' || mode === 'glorys' || mode === 'diff' || mode === 'hazard') && shown ? (
             <MapHeatmap
               field={shown}
-              mode='sequential'
+              mode={mode === 'diff' ? 'diverging' : 'sequential'}
               fixedRange={range}
-              selected={selected} showCoverage={showCoverage} onSelect={setSelected}
+              selected={selected}
+              showCoverage={showCoverage}
+              onSelect={setSelected}
             />
           ) : mode === 'hazard' ? (
             <div className="loading-panel" />
@@ -220,8 +319,11 @@ export default function ExploreView({ date, setDate, depth, setDepth, selected, 
           ) : (
             <div className="loading-panel" />
           )}
-          {(fieldLoading || hazardLoading) && (mode === 'model' || mode === 'hazard') && (
-            <div className="loading-overlay"><span>Updating visualization…</span></div>
+          {(fieldLoading || referenceLoading || hazardLoading) &&
+            (mode === 'model' || mode === 'glorys' || mode === 'diff' || mode === 'hazard') && (
+              <div className="loading-overlay">
+                <span>Updating visualization…</span>
+              </div>
           )}
         </div>
         {mode === 'hazard'
