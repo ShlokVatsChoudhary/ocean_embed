@@ -235,6 +235,32 @@ def test_comparison_handles_signed_and_zero_differences():
     assert zero.difference == 0.0
 
 
+def test_comparison_uses_model_resolved_grid_for_glorys_lookup():
+    class GridAwareModel(FakeComparisonModel):
+        def resolve_grid_point(self, *, latitude, longitude, date):
+            return {
+                "grid_latitude": 27.75,
+                "grid_longitude": 50.25,
+                "nearest_grid_latitude": 28.0,
+                "nearest_grid_longitude": 50.0,
+                "offset_degrees": 0.25,
+            }
+
+    class GridAwareGlorys(FakeGlorysSource):
+        pass
+
+    model = GridAwareModel(12.0)
+    glorys = GridAwareGlorys(9.0)
+    response = get_comparison(28.0, 50.0, date(2020, 1, 5), 100.0, model=model, glorys_source=glorys)
+
+    assert response.grid_latitude == 27.75
+    assert response.grid_longitude == 50.25
+    assert response.requested_latitude == 28.0
+    assert response.requested_longitude == 50.0
+    assert (glorys.received_request["latitude"], glorys.received_request["longitude"]) == (27.75, 50.25)
+    assert response.difference == 3.0
+
+
 def test_comparison_handles_missing_values():
     missing_oceanembed = get_comparison(
         1.0,

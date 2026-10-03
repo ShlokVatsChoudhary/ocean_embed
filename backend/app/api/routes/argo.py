@@ -31,16 +31,6 @@ def get_argo_reference() -> ArgoDataSource:
     return _get_argo_source()
 
 
-def get_argo_model() -> OceanEmbedModel:
-    """Route-level dependency so tests can override the model."""
-    return _get_model()
-
-
-def get_argo_reference() -> ArgoDataSource:
-    """Route-level dependency so tests can override the ARGO reference."""
-    return _get_argo_source()
-
-
 @router.get("/floats", response_model=ArgoFloatResponse, summary="Return ARGO-observed cells for a date")
 async def get_argo_floats(
     selected_date: date | None = Query(default=None, alias="date", description="Date to report ARGO cells for."),

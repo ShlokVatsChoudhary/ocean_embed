@@ -108,6 +108,15 @@ class ProfileResponse(BaseModel):
     longitude: float
     date: Date
     profile: list[ProfilePoint] = Field(default_factory=list)
+    requested_latitude: float | None = None
+    requested_longitude: float | None = None
+    grid_latitude: float | None = None
+    grid_longitude: float | None = None
+    glorys_profile: list[ProfilePoint] = Field(default_factory=list)
+    argo_profile: list[ProfilePoint] = Field(default_factory=list)
+    argo_date: Date | None = None
+    time_offset_days: int | None = None
+    provenance: str = ""
 
 
 class ComparisonRequest(BaseModel):

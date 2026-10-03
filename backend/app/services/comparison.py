@@ -92,18 +92,31 @@ def get_comparison(
     if glorys_source is None:
         glorys_source = GlorysDataAccessor()
 
-    oceanembed_temperature = _extract_point_temperature_from_model(
+    grid = _resolve_grid_point(
         model,
         latitude=latitude,
         longitude=longitude,
+        selected_date=selected_date,
+    )
+    resolved_latitude = grid.get("grid_latitude", latitude)
+    resolved_longitude = grid.get("grid_longitude", longitude)
+    if resolved_latitude is None:
+        resolved_latitude = latitude
+    if resolved_longitude is None:
+        resolved_longitude = longitude
+
+    oceanembed_temperature = _extract_point_temperature_from_model(
+        model,
+        latitude=float(resolved_latitude),
+        longitude=float(resolved_longitude),
         selected_date=selected_date,
         depth=depth,
     )
 
     try:
         glorys_payload = glorys_source.get_point_temperature(
-            latitude=latitude,
-            longitude=longitude,
+            latitude=float(resolved_latitude),
+            longitude=float(resolved_longitude),
             target_date=selected_date,
             depth=depth,
         )
@@ -116,13 +129,6 @@ def get_comparison(
         difference = None
     else:
         difference = oceanembed_temperature - glorys_temperature
-
-    grid = _resolve_grid_point(
-        model,
-        latitude=latitude,
-        longitude=longitude,
-        selected_date=selected_date,
-    )
 
     if oceanembed_temperature is None:
         state = "model_unavailable"
@@ -143,8 +149,6 @@ def get_comparison(
             "OceanEmbed minus GLORYS."
         )
 
-    # A non-zero offset means the requested cell had no complete column and the value came from
-    # a neighbouring full-column cell. Say so rather than implying the value is local.
     offset = grid.get("offset_degrees")
     if oceanembed_temperature is not None and isinstance(offset, (int, float)) and offset > 0:
         state_message = (
