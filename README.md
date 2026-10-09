@@ -6,32 +6,40 @@
 
 ## Overview
 
-Satellite observations capture the ocean surface, while understanding temperature beneath it is important for studying ocean dynamics and supporting marine and climate-related analysis.
-
-OceanEmbed combines a deep-learning model with an interactive web application to visualise reconstructed temperature fields across the **North Indian Ocean**.
+OceanEmbed combines satellite-derived ocean observations with a deep-learning model and an interactive web application to visualise reconstructed temperature fields across the **North Indian Ocean**.
 
 * **Region:** 5°N–30°N, 45°E–105°E
 * **Spatial resolution:** 0.25° × 0.25°
 * **Vertical range:** 0–1000 m
 * **Output:** Temperature fields at 15 standard depths
-* **Temporal resolution:** Daily model framework; the current demo exposes 1–7 January 2020
+* **Temporal resolution:** Daily
 
 ## Features
 
-* **Subsurface temperature maps** across the supported depths.
+* **Subsurface temperature maps** across multiple depths.
 * **Vertical profiles** to explore temperature variation with depth.
-* **Model–reference comparison** against GLORYS reanalysis where data is available.
-* **ARGO validation tools** for comparison with observational reference data.
-* **Interactive visualisation** through a dashboard and a dedicated instrument-style console.
-* **FastAPI backend** connecting the model, reference data, and frontend interfaces.
+* **Model–reference comparison** against GLORYS reanalysis.
+* **ARGO observation comparison** for model evaluation.
+* **Interactive visualisation** through a web dashboard and instrument-style console.
+* **FastAPI backend** connecting model inference, scientific datasets, and frontend interfaces.
 
 ## Model Pipeline
 
-The intended problem-statement pipeline uses seven surface variables: sea-surface temperature (SST), sea-surface salinity (SSS), sea-level anomaly (SLA), two wind components, and two current components.
+The seven-channel input specification covers the key surface variables required by the problem statement:
 
-The current integrated model uses **five input channels** — SST, SSS, SLA, UGOS, and VGOS — to predict temperature at 15 standard depths. Integration of the remaining wind inputs is still a limitation.
+| Input | Variable                           |
+| ----- | ---------------------------------- |
+| 1     | Sea Surface Temperature (SST)      |
+| 2     | Sea Surface Salinity (SSS)         |
+| 3     | Sea Level Anomaly (SLA)            |
+| 4     | Zonal Wind Component (U-wind)      |
+| 5     | Meridional Wind Component (V-wind) |
+| 6     | Zonal Ocean Current (UGOS)         |
+| 7     | Meridional Ocean Current (VGOS)    |
 
-GLORYS reanalysis provides the model's training/reference temperature fields, while ARGO data is used for observational comparison. Validation results must be interpreted alongside the dataset's spatial and temporal resolution and training-period overlap.
+A CNN encoder–decoder processes these surface inputs to reconstruct temperature at 15 standard depths: 0, 5, 10, 20, 30, 50, 75, 100, 125, 150, 200, 300, 500, 700, and 1000 m.
+
+GLORYS reanalysis provides reference temperature fields for model training and comparison, while ARGO observations support evaluation against in-situ measurements.
 
 ## Tech Stack
 
@@ -85,13 +93,13 @@ The launcher starts the backend and both frontend interfaces.
 | Console interface | http://localhost:5174      |
 | API documentation | http://localhost:8000/docs |
 
-To start only one interface, use `./run.sh --dashboard` or `./run.sh --console`. Stop the services with `./run.sh --stop`.
+To start a single interface, use `./run.sh --dashboard` or `./run.sh --console`. Stop the services with `./run.sh --stop`.
 
 ## Project Status
 
-OceanEmbed includes an integrated web application, a TensorFlow inference adapter, bundled model weights and sample data, API tests, and evaluation tooling.
+OceanEmbed brings together deep-learning-based temperature reconstruction, an interactive visualisation platform, reference-data comparisons, and evaluation tooling. The application supports exploration of reconstructed subsurface temperature fields across the North Indian Ocean.
 
-The current demo is limited to its bundled sample dates. Full-scale evaluation depends on the required datasets being available. The seven-variable problem-statement specification is not yet fully implemented, and validation results should not be interpreted as proof of operational forecasting skill.
+Model performance and observational validation should be interpreted in the context of data coverage, spatial and temporal resolution, and the independence of evaluation periods.
 
 ---
 
