@@ -2,34 +2,34 @@
 #
 # One-command launcher for the OceanEmbed demo.
 #
-#   ./run.sh             start backend + both UIs, open the console
+#   ./run.sh             start backend + dashboard + console
+#   ./run.sh --dashboard start backend + the dashboard only   (:5173)
 #   ./run.sh --console   start backend + the console UI only   (:5174)
-#   ./run.sh --original  start backend + the original UI only  (:5173)
 #   ./run.sh --stop      stop anything left running from a previous start
 #
 # Backend:  http://localhost:8000  (API + docs at /docs)
+# Dashboard: http://localhost:5173  (the main tabbed dashboard)
 # Console:  http://localhost:5174  (the single-screen instrument UI)
-# Original: http://localhost:5173  (the tabbed dashboard, kept for comparison)
 #
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_PORT=8000
-ORIGINAL_PORT=5173
+DASHBOARD_PORT=5173
 CONSOLE_PORT=5174
 LOG_DIR="$ROOT/.run-logs"
 PID_FILE="$LOG_DIR/pids"
 
-ORIGINAL_DIR="$ROOT/frontend/frontend"
+DASHBOARD_DIR="$ROOT/frontend/dashboard"
 CONSOLE_DIR="$ROOT/frontend/console"
 
 MODE="both"
 case "${1:-}" in
   --stop)     MODE="stop" ;;
   --console)  MODE="console" ;;
-  --original) MODE="original" ;;
+  --dashboard|--original) MODE="dashboard" ;;
   "")         MODE="both" ;;
-  *) echo "Unknown option: $1 (expected --console, --original or --stop)" >&2; exit 2 ;;
+  *) echo "Unknown option: $1 (expected --dashboard, --console or --stop)" >&2; exit 2 ;;
 esac
 
 stop_all() {
@@ -41,7 +41,7 @@ stop_all() {
   fi
   # Belt and braces: catch anything started by an earlier run.
   pkill -f "uvicorn app.main:app --port $BACKEND_PORT" 2>/dev/null || true
-  pkill -f "vite.*--port $ORIGINAL_PORT" 2>/dev/null || true
+  pkill -f "vite.*--port $DASHBOARD_PORT" 2>/dev/null || true
   pkill -f "vite.*--port $CONSOLE_PORT" 2>/dev/null || true
 }
 
@@ -80,20 +80,20 @@ prepare_ui() {
   fi
 }
 
-WANT_ORIGINAL=false
+WANT_DASHBOARD=false
 WANT_CONSOLE=false
 case "$MODE" in
-  both)     WANT_ORIGINAL=true; WANT_CONSOLE=true ;;
-  original) WANT_ORIGINAL=true ;;
+  both)     WANT_DASHBOARD=true; WANT_CONSOLE=true ;;
+  dashboard) WANT_DASHBOARD=true ;;
   console)  WANT_CONSOLE=true ;;
 esac
 
-if $WANT_ORIGINAL; then prepare_ui "$ORIGINAL_DIR" "$ORIGINAL_PORT" "original UI"; fi
+if $WANT_DASHBOARD; then prepare_ui "$DASHBOARD_DIR" "$DASHBOARD_PORT" "dashboard"; fi
 if $WANT_CONSOLE;  then prepare_ui "$CONSOLE_DIR"  "$CONSOLE_PORT"  "console"; fi
 
 # ----------------------------------------------------------- port availability
 PORTS=("$BACKEND_PORT")
-if $WANT_ORIGINAL; then PORTS+=("$ORIGINAL_PORT"); fi
+if $WANT_DASHBOARD; then PORTS+=("$DASHBOARD_PORT"); fi
 if $WANT_CONSOLE;  then PORTS+=("$CONSOLE_PORT"); fi
 for port in "${PORTS[@]}"; do
   if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
@@ -140,8 +140,8 @@ start_ui() {
   fi
 }
 
-if $WANT_CONSOLE;  then start_ui "$CONSOLE_DIR"  "$CONSOLE_PORT"  "console"     console.log; fi
-if $WANT_ORIGINAL; then start_ui "$ORIGINAL_DIR" "$ORIGINAL_PORT" "original UI" frontend.log; fi
+if $WANT_DASHBOARD; then start_ui "$DASHBOARD_DIR" "$DASHBOARD_PORT" "dashboard" dashboard.log; fi
+if $WANT_CONSOLE;   then start_ui "$CONSOLE_DIR"   "$CONSOLE_PORT"   "console"   console.log; fi
 
 trap stop_all EXIT INT TERM
 
@@ -149,14 +149,14 @@ trap stop_all EXIT INT TERM
   echo
   echo "  OceanEmbed is running."
   echo
-  if $WANT_CONSOLE;  then echo "    Console   http://localhost:$CONSOLE_PORT"; fi
-  if $WANT_ORIGINAL; then echo "    Original  http://localhost:$ORIGINAL_PORT"; fi
+  if $WANT_DASHBOARD; then echo "    Dashboard http://localhost:$DASHBOARD_PORT"; fi
+  if $WANT_CONSOLE;   then echo "    Console   http://localhost:$CONSOLE_PORT"; fi
   echo "    API       http://127.0.0.1:$BACKEND_PORT"
   echo "    Docs      http://127.0.0.1:$BACKEND_PORT/docs"
   echo
   echo "  Logs    $LOG_DIR/backend.log"
-  if $WANT_CONSOLE;  then echo "          $LOG_DIR/console.log"; fi
-  if $WANT_ORIGINAL; then echo "          $LOG_DIR/frontend.log"; fi
+  if $WANT_DASHBOARD; then echo "          $LOG_DIR/dashboard.log"; fi
+  if $WANT_CONSOLE;   then echo "          $LOG_DIR/console.log"; fi
   echo
   echo "  Press Ctrl+C to stop, or run ./run.sh --stop in another terminal."
   echo

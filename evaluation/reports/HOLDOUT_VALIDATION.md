@@ -11,8 +11,9 @@ train_idx = np.arange(0, T - n_val) # days   0-292  (1 Jan – 19 Oct 2020)
 
 The published weights (`weights/model_2020.weights.h5`, sha256 `0eeb3ea6…` — **byte-identical to the
 weights the backend serves**) are the *best-val-loss* weights from that run. So days 293–365 were
-never trained on. Together with the full-year arrays and full-year ARGO that ship in
-`~/Downloads/PS66-Ocean-Model-9ch`, this is a real out-of-sample evaluation at **zero download cost**.
+never trained on. Together with the full-year arrays and full-year ARGO available under the configured model package,
+this is a real out-of-sample evaluation. Those full-year holdout assets are not included in this
+repository checkout; provide them through `--model-dir` or `OCEANEMBED_MODEL_ROOT` to run the scripts.
 
 Caveat: the holdout was used for early stopping / model selection, so it is a *validation* set, not a
 fully pristine test set. No gradient step ever used it.

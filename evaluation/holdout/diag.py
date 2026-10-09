@@ -1,6 +1,7 @@
-import sys, os, numpy as np, tensorflow as tf
-MODEL_DIR = "/Users/yogchhablani/Downloads/PS66-Ocean-Model-9ch"
-sys.path.insert(0, MODEL_DIR); os.chdir(MODEL_DIR)
+import numpy as np, tensorflow as tf
+from common import configure_model_root
+
+MODEL_DIR = configure_model_root()
 from src import data
 from src import model as M
 from src.config import DEPTHS

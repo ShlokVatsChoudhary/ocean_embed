@@ -10,19 +10,21 @@ Baselines:
 from __future__ import annotations
 
 import sys
+import argparse
+import os
 from datetime import date, timedelta
 from pathlib import Path
 
 import numpy as np
 
-REPO = Path.home() / "oe_work"
-sys.path.insert(0, str(REPO / "backend"))
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_MODEL_DIR = REPO_ROOT / "model" / "PS66-Ocean-Model"
+sys.path.insert(0, str(REPO_ROOT / "backend"))
 
 from app.core.constants import STANDARD_DEPTHS  # noqa: E402
 from app.data.argo import ArgoDataAccessor  # noqa: E402
 from app.model.adapter import OceanEmbedModelAdapter  # noqa: E402
 
-MODEL_DIR = REPO / "model" / "PS66-Ocean-Model"
 DATES = [date(2020, 1, 1) + timedelta(days=i) for i in range(7)]
 GE50 = 50.0
 THERMO = (50.0, 200.0)
@@ -39,9 +41,30 @@ def band_slice(lo, hi):
 
 
 def main() -> None:
-    X = np.load(MODEL_DIR / "samples/X_2020.npy")
-    Y = np.load(MODEL_DIR / "samples/Y_2020.npy")
-    stats = np.load(MODEL_DIR / "samples/stats_2020.npz")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--model-dir",
+        type=Path,
+        default=Path(os.environ.get("OCEANEMBED_MODEL_ROOT", DEFAULT_MODEL_DIR)),
+        help="model package directory (default: OCEANEMBED_MODEL_ROOT or repository model package)",
+    )
+    model_dir = parser.parse_args().model_dir.expanduser().resolve()
+    required = (
+        model_dir / "samples" / "X_2020.npy",
+        model_dir / "samples" / "Y_2020.npy",
+        model_dir / "samples" / "stats_2020.npz",
+    )
+    missing = [str(path) for path in required if not path.is_file()]
+    if missing:
+        raise FileNotFoundError(
+            "Required bundled validation sample(s) are missing: "
+            + ", ".join(missing)
+            + ". Use --model-dir or OCEANEMBED_MODEL_ROOT to select a model package."
+        )
+
+    X = np.load(model_dir / "samples/X_2020.npy")
+    Y = np.load(model_dir / "samples/Y_2020.npy")
+    stats = np.load(model_dir / "samples/stats_2020.npz")
     y_mean, y_std = float(stats["y_mean"]), float(stats["y_std"])
 
     # NOTE: samples/Y_2020.npy is already in degC (6.0-31.4 range). The stats file's y_mean/y_std
@@ -50,7 +73,7 @@ def main() -> None:
     truth = Y.astype(np.float64)
     clim = np.nanmean(truth, axis=0)  # 7-day mean field
 
-    model = OceanEmbedModelAdapter(model_root=MODEL_DIR)
+    model = OceanEmbedModelAdapter(model_root=model_dir)
     argo = ArgoDataAccessor()
 
     depth_ge50 = band_slice(GE50, STANDARD_DEPTHS[-1])

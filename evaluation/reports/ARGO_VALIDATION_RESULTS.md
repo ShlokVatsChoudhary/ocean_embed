@@ -1,6 +1,6 @@
 # Independent ARGO validation — results
 
-Produced by `validate_argo_baselines.py`. Every method is scored against the **same ARGO
+Produced by [`validate_argo_baselines.py`](../argo/validate_argo_baselines.py). Every method is scored against the **same ARGO
 observations on the same mask**, so the comparison between methods is apples-to-apples.
 ARGO is never used in training.
 

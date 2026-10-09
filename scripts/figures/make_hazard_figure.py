@@ -4,8 +4,8 @@ Left  : the TCHP product the model delivers (cyclone fuel, 2020-01-01).
 Right : the same diagnostic computed from GLORYS truth, for comparison.
 Bottom: accuracy of each derived diagnostic against GLORYS.
 
-Run from ~/oe_work with the backend importable:
-    cd ~/oe_work/backend && python3 ../make_hazard_figure.py
+Run from any directory:
+    python scripts/figures/make_hazard_figure.py
 """
 
 from __future__ import annotations
@@ -23,7 +23,8 @@ import numpy as np
 from matplotlib.colors import BoundaryNorm, ListedColormap
 from matplotlib.patches import Patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parent / "backend"))
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT / "backend"))
 
 from app.core.constants import STANDARD_DEPTHS  # noqa: E402
 from app.data.glorys import GlorysDataAccessor  # noqa: E402
@@ -31,8 +32,8 @@ from app.model.adapter import OceanEmbedModelAdapter  # noqa: E402
 from app.science.hazard import CATEGORY_BREAKS, CATEGORY_LABELS, hazard_fields  # noqa: E402
 
 TARGET = date(2020, 1, 1)
-OUT = Path(__file__).resolve().parent / "figures" / "hazard_tchp_2020-01-01.png"
-DECK_OUT = Path(__file__).resolve().parent / "figures" / "hazard_deck.png"
+OUT = REPO_ROOT / "docs" / "figures" / "hazard_tchp_2020-01-01.png"
+DECK_OUT = REPO_ROOT / "docs" / "figures" / "hazard_deck.png"
 
 NAVY = "#0B2545"
 GREY = "#555B63"
@@ -91,6 +92,7 @@ def build_deck_figure(tchp_pred, tchp_true, rmse) -> None:
     for left, right in collisions[:6]:
         print(f"    !! {left!r} overlaps {right!r}")
 
+    DECK_OUT.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(DECK_OUT, dpi=260, facecolor="white")
     plt.close(fig)
     print(f"wrote {DECK_OUT}")

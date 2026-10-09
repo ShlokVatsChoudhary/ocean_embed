@@ -5,10 +5,10 @@ The published weights are the best-val-loss weights from that run, so days 293-3
 real, never-trained-on holdout.  We score both windows against GLORYS to prove the split
 is genuine (train RMSE must be lower than holdout RMSE) and to report honest skill.
 """
-import sys, numpy as np, tensorflow as tf
-MODEL_DIR = "/Users/yogchhablani/Downloads/PS66-Ocean-Model-9ch"
-sys.path.insert(0, MODEL_DIR)
-import os; os.chdir(MODEL_DIR)
+import numpy as np, tensorflow as tf
+from common import configure_model_root
+
+MODEL_DIR = configure_model_root()
 from src import data
 from src import model as M
 from src.config import DEPTHS

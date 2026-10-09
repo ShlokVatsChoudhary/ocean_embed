@@ -78,9 +78,12 @@ Two things that will bite you: raw `[` / `]` in the request target make Tomcat r
 cd backend && python3 -m pip install -e . && python3 -m uvicorn app.main:app --port 8000
 python3 -m pytest -q          # 44 passed, 1 skipped
 
-# frontend
-cd frontend/frontend && npm install && npm run dev   # VITE_API_BASE=http://localhost:8000
+# main frontend
+cd frontend/dashboard && npm install && npm run dev  # VITE_API_BASE=http://localhost:8000
 npx oxlint src && npx vite build
+
+# optional single-screen console
+cd frontend/console && npm install && npm run dev
 ```
 
 Endpoints: `/api/metadata`, `/api/temperature`, `/api/temperature/coverage`, `/api/profile`,

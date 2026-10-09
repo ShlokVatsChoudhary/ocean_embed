@@ -1,7 +1,8 @@
 """Independent ARGO check restricted to the GENUINE temporal holdout (last 73 days of 2020)."""
-import sys, os, numpy as np, pandas as pd, tensorflow as tf, xarray as xr
-MODEL_DIR = "/Users/yogchhablani/Downloads/PS66-Ocean-Model-9ch"
-sys.path.insert(0, MODEL_DIR); os.chdir(MODEL_DIR)
+import numpy as np, pandas as pd, tensorflow as tf, xarray as xr
+from common import configure_model_root
+
+MODEL_DIR = configure_model_root(require_argo=True)
 from src import data, argo, harmonize
 from src import model as M
 from src.config import DEPTHS
@@ -12,7 +13,7 @@ T = X.shape[0]; lo = T - T // 5
 depths = np.asarray(DEPTHS, float)
 
 # ---- ARGO, canonical pipeline (strip fill, standard depths, regrid to target) ----
-P = os.path.join(MODEL_DIR, "data/raw/argo_2020.nc")
+P = MODEL_DIR / "data/raw/argo_2020.nc"
 ds = xr.open_dataset(P, mask_and_scale=False)
 tvar = next(v for v in ("T_ANALYZED", "temp", "temperature") if v in ds)
 Tv = ds[tvar]; a = Tv.values.astype("float64")
