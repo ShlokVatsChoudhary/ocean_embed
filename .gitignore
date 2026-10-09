@@ -39,3 +39,8 @@ data/processed/
 
 # Local run artifacts (see run.sh)
 .run-logs/
+
+# Node.js / frontend build artifacts
+node_modules/
+dist/
+
